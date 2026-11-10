@@ -9,6 +9,7 @@ import {
   STATUS_LIST,
   displayCategory,
   displayStatus,
+  PHASE_NAMES_EN,
 } from '../lib/trackerLogic';
 import {
   Search,
@@ -111,7 +112,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
         {!isViewOnly && (
           <button
             onClick={() => setIsShortcutOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-slate-900 bg-[#ffc83b] hover:bg-amber-400 shadow-sm hover:shadow-md transition-all cursor-pointer self-start md:self-auto transform hover:-translate-y-0.5"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] shadow-sm hover:shadow-md transition-all cursor-pointer self-start md:self-auto transform hover:-translate-y-0.5"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>New Project</span>
@@ -119,57 +120,77 @@ export const ProjectList: React.FC<ProjectListProps> = ({
         )}
       </div>
 
-      {/* 4 Clean Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs hover:border-amber-400/50 transition-all">
-          <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+      {/* 4 Niond-Style Pastel & Slate Metric Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Card 1: Lavender / Soft Lilac */}
+        <div className="bg-[#eee8ff] p-5 rounded-2xl sm:rounded-3xl border border-[#ded5fc] shadow-2xs transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4d3b94]">
               Total Projects
             </span>
-            <Layers className="w-4 h-4 text-slate-400" />
+            <div className="w-7 h-7 rounded-full bg-[#dfd6fc] text-[#5841b8] flex items-center justify-center">
+              <Layers className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900">{totalCount}</p>
-          <span className="text-[11px] text-slate-400 font-medium">Active & archived</span>
+          <div>
+            <p className="text-2xl sm:text-3xl font-black text-[#2a1b63]">{totalCount}</p>
+            <span className="text-[11px] text-[#6954b8] font-semibold mt-0.5 block">Active & archived</span>
+          </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs hover:border-blue-400/50 transition-all">
-          <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        {/* Card 2: Sky Blue Pastel */}
+        <div className="bg-[#daf0ff] p-5 rounded-2xl sm:rounded-3xl border border-[#c4e5ff] shadow-2xs transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#124d91]">
               In Progress
             </span>
-            <Clock className="w-4 h-4 text-blue-500" />
+            <div className="w-7 h-7 rounded-full bg-[#c8e7fc] text-[#1b64ba] flex items-center justify-center">
+              <Clock className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-blue-600">{inProgressCount}</p>
-          <span className="text-[11px] text-slate-400 font-medium">Active development cycles</span>
+          <div>
+            <p className="text-2xl sm:text-3xl font-black text-[#0f3d73]">{inProgressCount}</p>
+            <span className="text-[11px] text-[#2467b6] font-semibold mt-0.5 block">Active development cycles</span>
+          </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-400/50 transition-all">
-          <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        {/* Card 3: Mint / Soft Emerald Pastel */}
+        <div className="bg-[#cbf7df] p-5 rounded-2xl sm:rounded-3xl border border-[#b1f1ce] shadow-2xs transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0e5c36]">
               Completed / Ready
             </span>
-            <CheckCircle2 className="w-4 h-4 text-teal-600" />
+            <div className="w-7 h-7 rounded-full bg-[#b5efce] text-[#128a4f] flex items-center justify-center">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-teal-600">{completedCount}</p>
-          <span className="text-[11px] text-slate-400 font-medium">Ready for commercial launch</span>
+          <div>
+            <p className="text-2xl sm:text-3xl font-black text-[#084225]">{completedCount}</p>
+            <span className="text-[11px] text-[#1b7a48] font-semibold mt-0.5 block">Ready for commercial launch</span>
+          </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs hover:border-purple-400/50 transition-all">
-          <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        {/* Card 4: Sleek Dark Slate / Teal with Lime Pill (Niond Signature) */}
+        <div className="bg-slate-900 p-5 rounded-2xl sm:rounded-3xl border border-slate-800 shadow-2xs text-white transition-all flex flex-col justify-between relative overflow-hidden">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
               Target Volume
             </span>
-            <Package className="w-4 h-4 text-purple-500" />
+            <span className="px-2 py-0.5 rounded-md bg-[#ccf835] text-slate-950 font-black text-[10px] tracking-wide">
+              Planned
+            </span>
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900">
-            {totalVolume > 0 ? totalVolume.toLocaleString('en-US') : '-'}
-          </p>
-          <span className="text-[11px] text-slate-400 font-medium">Total planned units</span>
+          <div>
+            <p className="text-2xl sm:text-3xl font-black text-white">
+              {totalVolume > 0 ? totalVolume.toLocaleString('en-US') : '-'}
+            </p>
+            <span className="text-[11px] text-slate-400 font-medium mt-0.5 block">Total order units planned</span>
+          </div>
         </div>
       </div>
 
       {/* Filter and View Mode Switcher */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+      <div className="bg-white p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
         {/* Search */}
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -178,7 +199,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder=""
-            className="w-full text-xs sm:text-sm pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-slate-50/60 font-medium"
+            className="w-full text-xs sm:text-sm pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#ccf835] bg-slate-50/60 font-medium"
           />
         </div>
 
@@ -187,7 +208,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold focus:outline-hidden focus:ring-2 focus:ring-amber-400 cursor-pointer"
+            className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold focus:outline-hidden focus:ring-2 focus:ring-[#ccf835] cursor-pointer"
           >
             <option value="">All Categories</option>
             <option value="Dietary Supplement">Dietary Supplement</option>
@@ -197,7 +218,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold focus:outline-hidden focus:ring-2 focus:ring-amber-400 cursor-pointer"
+            className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold focus:outline-hidden focus:ring-2 focus:ring-[#ccf835] cursor-pointer"
           >
             <option value="">All Statuses</option>
             {STATUS_LIST.map((s) => (
@@ -214,7 +235,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
               title="Card View"
               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                 viewMode === 'cards'
-                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                  ? 'bg-[#ccf835] text-slate-950 shadow-2xs font-bold'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -225,7 +246,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
               title="Table View"
               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                 viewMode === 'table'
-                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                  ? 'bg-[#ccf835] text-slate-950 shadow-2xs font-bold'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -252,31 +273,35 @@ export const ProjectList: React.FC<ProjectListProps> = ({
               const co = costOf(p);
               const s = summ(p, cs, co, holidaysSet);
 
+              const isSupplement = displayCategory(p.category) === 'Dietary Supplement';
+
               return (
                 <div
                   key={p.id}
                   onClick={() => onSelectProject(p.id)}
-                  className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-xs hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between hover:border-amber-400/80 relative overflow-hidden"
+                  className={`rounded-3xl p-5 sm:p-6 shadow-xs hover:shadow-lg transition-all cursor-pointer group flex flex-col justify-between relative overflow-hidden ${
+                    isSupplement
+                      ? 'border-2 border-[#84cc16] hover:border-[#65a30d] bg-gradient-to-b from-[#f7fee7]/80 via-white to-white'
+                      : 'border-2 border-[#0284c7] hover:border-[#0369a1] bg-gradient-to-b from-[#f0f9ff]/80 via-white to-white'
+                  }`}
                 >
                   {/* Category Accent top border */}
                   <div
-                    className="absolute top-0 left-0 right-0 h-1.5"
-                    style={{
-                      backgroundColor:
-                        p.category === 'อาหารเสริม' ? '#ffc83b' : '#0d9488',
-                    }}
+                    className={`absolute top-0 left-0 right-0 h-1.5 ${
+                      isSupplement ? 'bg-[#84cc16]' : 'bg-[#0284c7]'
+                    }`}
                   />
 
                   {/* Card Header: Name, Lot, FDA, Category, Status */}
-                  <div className="space-y-2 pb-3">
+                  <div className="space-y-2.5 pb-2">
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                              displayCategory(p.category) === 'Dietary Supplement'
-                                ? 'bg-amber-100 text-amber-900 border border-amber-300/40'
-                                : 'bg-teal-100 text-teal-900 border border-teal-300/40'
+                            className={`px-3 py-1 rounded-full text-xs font-black shadow-2xs ${
+                              isSupplement
+                                ? 'bg-[#ccf835] text-slate-950 border border-[#84cc16]'
+                                : 'bg-[#0284c7] text-white border border-[#0369a1]'
                             }`}
                           >
                             {displayCategory(p.category)}
@@ -292,7 +317,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                             </span>
                           )}
                         </div>
-                        <h3 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-teal-700 transition-colors font-heading leading-snug whitespace-normal break-words">
+                        <h3 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-teal-700 transition-colors font-heading leading-snug whitespace-normal break-words pt-0.5">
                           {p.name || '(Untitled Project)'}
                         </h3>
                       </div>
@@ -328,56 +353,130 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                     </div>
                   </div>
 
-                  {/* CURRENT ACTIVE STEP & PROGRESS TRACK */}
-                  <div className="my-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-1.5">
-                    <div className="flex items-center justify-between text-xs font-bold">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full"
+                  {/* PROGRESS SECTION: OVERALL BAR & MAIN PHASE MILESTONES */}
+                  <div className="my-3 p-3.5 rounded-2xl bg-white/95 border border-slate-200/90 shadow-2xs space-y-3">
+                    {/* Overall Project Progress Header & Bar (Main & Prominent) */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full animate-pulse"
+                            style={{
+                              backgroundColor:
+                                s.pct === 100
+                                  ? '#10b981'
+                                  : isSupplement
+                                  ? '#84cc16'
+                                  : '#0284c7',
+                            }}
+                          />
+                          <span className="font-extrabold text-slate-900">
+                            Overall Project Progress
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-black text-slate-900 text-sm">
+                            {s.pct}%
+                          </span>
+                          <span className="text-[11px] font-semibold text-slate-400">
+                            ({s.done}/{s.total} tasks)
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Main Overall Progress Bar */}
+                      <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/70">
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
                           style={{
+                            width: `${s.pct}%`,
                             backgroundColor:
-                              phaseColors[s.stage.k] || '#0d9488',
+                              s.pct === 100
+                                ? '#10b981'
+                                : isSupplement
+                                ? '#84cc16'
+                                : '#0284c7',
                           }}
                         />
-                        <span className="text-slate-800">
-                          {s.stage.name}
-                        </span>
                       </div>
-                      <span className="text-teal-700 font-extrabold">
-                        {s.pct}%
-                      </span>
                     </div>
 
-                    <p className="text-xs text-slate-600 font-medium pl-4.5">
-                      Active Task:{' '}
-                      <strong className="text-slate-900">
-                        {s.currentTaskName || 'Awaiting Next Stage'}
-                      </strong>
-                    </p>
+                    {/* Phase Milestones: Main Headers Progress & % (Compact Mini Bars) */}
+                    <div className="pt-2.5 border-t border-slate-100 space-y-2">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-extrabold uppercase tracking-wider text-slate-500">
+                          Phase Milestones
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-400">
+                          Progress by Stage
+                        </span>
+                      </div>
 
-                    {/* Mini Visual 6-Phase Progress Bar */}
-                    <div className="flex gap-1 h-2 rounded-full overflow-hidden pt-1">
-                      {p.phases.map((ph) => {
-                        const doneCount = ph.tasks.filter((t) => t.done).length;
-                        const totalTasks = ph.tasks.length;
-                        const ratio = totalTasks ? doneCount / totalTasks : 0;
-                        return (
-                          <div
-                            key={ph.k}
-                            className="flex-1 bg-slate-200 rounded-full overflow-hidden h-full"
-                            title={`${ph.name}: ${Math.round(ratio * 100)}%`}
-                          >
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {p.phases.map((ph) => {
+                          const phaseTotal = ph.tasks.length;
+                          const phaseDone = ph.tasks.filter((t) => t.done).length;
+                          const phasePct = phaseTotal
+                            ? Math.round((phaseDone / phaseTotal) * 100)
+                            : 0;
+                          const phaseName = PHASE_NAMES_EN[ph.k] || ph.name;
+                          const color = phaseColors[ph.k] || '#0d9488';
+                          const isDone = phasePct === 100;
+                          const isInProgress = phasePct > 0 && phasePct < 100;
+
+                          return (
                             <div
-                              className="h-full transition-all"
-                              style={{
-                                width: `${Math.round(ratio * 100)}%`,
-                                backgroundColor:
-                                  phaseColors[ph.k] || '#0d9488',
-                              }}
-                            />
-                          </div>
-                        );
-                      })}
+                              key={ph.k}
+                              className={`p-2 rounded-xl border transition-colors ${
+                                isDone
+                                  ? 'bg-emerald-50/70 border-emerald-200/80'
+                                  : isInProgress
+                                  ? 'bg-slate-50 border-slate-200'
+                                  : 'bg-white border-slate-200/60'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between text-[11px] mb-1">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span
+                                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                      isInProgress ? 'animate-pulse' : ''
+                                    }`}
+                                    style={{ backgroundColor: color }}
+                                  />
+                                  <span
+                                    className="font-bold text-slate-800 truncate"
+                                    title={phaseName}
+                                  >
+                                    {phaseName}
+                                  </span>
+                                </div>
+                                <span
+                                  className={`text-[11px] font-black flex-shrink-0 ml-1.5 ${
+                                    isDone
+                                      ? 'text-emerald-700'
+                                      : isInProgress
+                                      ? 'text-slate-900'
+                                      : 'text-slate-400'
+                                  }`}
+                                >
+                                  {phasePct}%
+                                </span>
+                              </div>
+
+                              {/* Compact Mini Bar (Subordinate to overall bar) */}
+                              <div className="w-full h-1.5 bg-slate-200/70 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-300"
+                                  style={{
+                                    width: `${phasePct}%`,
+                                    backgroundColor: color,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
 
@@ -432,7 +531,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
 
                     <button
                       onClick={() => onSelectProject(p.id)}
-                      className="p-2 rounded-xl bg-slate-100 hover:bg-[#ffc83b] text-slate-700 hover:text-slate-900 transition-colors cursor-pointer flex-shrink-0"
+                      className="p-2 rounded-xl bg-slate-100 group-hover:bg-[#ccf835] text-slate-700 group-hover:text-slate-950 transition-colors cursor-pointer flex-shrink-0"
                       title="View Project Details"
                     >
                       <ChevronRight className="w-4 h-4" />
@@ -469,12 +568,53 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                   const cs = compute(p, holidaysSet);
                   const co = costOf(p);
                   const s = summ(p, cs, co, holidaysSet);
+                  const isSupplement = displayCategory(p.category) === 'Dietary Supplement';
+
+                  // Compute concurrent active tasks
+                  const doneTaskIds = new Set(
+                    p.phases.flatMap((ph) => ph.tasks.filter((t) => t.done).map((t) => t.id))
+                  );
+
+                  const activeTasks: {
+                    phaseKey: number;
+                    phaseName: string;
+                    phaseColor: string;
+                    taskName: string;
+                  }[] = [];
+
+                  p.phases.forEach((ph) => {
+                    const allDone = ph.tasks.length > 0 && ph.tasks.every((t) => t.done);
+                    if (allDone) return;
+                    const unblocked = ph.tasks.filter((t) => {
+                      if (t.done) return false;
+                      if (!t.dep || t.dep === '@start' || t.dep === '') return true;
+                      if (t.dep === '@all') {
+                        const others = ph.tasks.filter((o) => o.id !== t.id);
+                        return others.length > 0 && others.every((o) => o.done);
+                      }
+                      return doneTaskIds.has(t.dep);
+                    });
+                    if (unblocked.length > 0) {
+                      unblocked.forEach((t) => {
+                        activeTasks.push({
+                          phaseKey: ph.k,
+                          phaseName: ph.name,
+                          phaseColor: phaseColors[ph.k] || '#0d9488',
+                          taskName: t.name,
+                        });
+                      });
+                    }
+                  });
 
                   return (
                     <tr
                       key={p.id}
                       onClick={() => onSelectProject(p.id)}
-                      className="hover:bg-amber-50/40 transition-colors cursor-pointer group"
+                      className={`hover:bg-slate-50 transition-colors cursor-pointer group ${
+                        isSupplement
+                          ? 'border-l-4 border-l-[#84cc16]'
+                          : 'border-l-4 border-l-[#0284c7]'
+                      }`}
                     >
                       <td className="py-3.5 px-4 max-w-xs sm:max-w-sm">
                         <div className="font-bold text-slate-900 group-hover:text-teal-700 transition-colors whitespace-normal break-words leading-snug">
@@ -491,7 +631,13 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                       </td>
 
                       <td className="py-3.5 px-3">
-                        <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-black ${
+                            isSupplement
+                              ? 'bg-[#ccf835] text-slate-950 border border-[#84cc16]'
+                              : 'bg-[#0284c7] text-white border border-[#0369a1]'
+                          }`}
+                        >
                           {displayCategory(p.category)}
                         </span>
                       </td>
@@ -510,16 +656,38 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                             className="w-2 h-2 rounded-full"
                             style={{
                               backgroundColor:
-                                phaseColors[s.stage.k] || '#0d9488',
+                                phaseColors[s.stage.k] || (isSupplement ? '#a3e635' : '#0284c7'),
                             }}
                           />
                           <span>{s.stage.name}</span>
                         </div>
-                        {s.currentTaskName && (
+                        {activeTasks.length > 1 ? (
+                          <div className="flex flex-col gap-0.5 mt-1">
+                            {activeTasks.slice(0, 2).map((at, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-center gap-1 text-[11px] text-slate-600 truncate max-w-[200px]"
+                              >
+                                <span
+                                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                  style={{ backgroundColor: at.phaseColor }}
+                                />
+                                <span className="font-semibold text-slate-800 truncate">
+                                  {at.taskName}
+                                </span>
+                              </div>
+                            ))}
+                            {activeTasks.length > 2 && (
+                              <span className="text-[10px] text-teal-700 font-bold">
+                                +{activeTasks.length - 2} more concurrent
+                              </span>
+                            )}
+                          </div>
+                        ) : s.currentTaskName ? (
                           <div className="text-[11px] text-slate-400 truncate max-w-[180px]">
                             {s.currentTaskName}
                           </div>
-                        )}
+                        ) : null}
                       </td>
 
                       <td className="py-3.5 px-4">
@@ -605,8 +773,12 @@ export const ProjectList: React.FC<ProjectListProps> = ({
             </button>
 
             <div className="space-y-1 mb-5">
-              <div className="w-10 h-10 rounded-2xl bg-[#ffc83b] text-slate-950 flex items-center justify-center mb-2 font-black shadow-xs">
-                ✦
+              <div className="w-11 h-11 rounded-2xl overflow-hidden flex items-center justify-center mb-2 shadow-xs border border-slate-200 bg-white p-1">
+                <img
+                  src="/assets/aistudio/image_5173417e.png"
+                  alt="Project Tracker"
+                  className="w-full h-full object-contain"
+                />
               </div>
               <h3 className="text-lg font-bold text-slate-900 font-heading">
                 New Project Shortcut
@@ -684,7 +856,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                   <label
                     className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-bold cursor-pointer transition-colors ${
                       quickCategory === 'อาหารเสริม'
-                        ? 'border-amber-400 bg-amber-50 text-amber-900'
+                        ? 'border-[#ccf835] bg-[#f4fae1] text-slate-950 font-black'
                         : 'border-slate-200 bg-white text-slate-700'
                     }`}
                   >
@@ -693,7 +865,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                       name="qcat"
                       checked={quickCategory === 'อาหารเสริม'}
                       onChange={() => setQuickCategory('อาหารเสริม')}
-                      className="accent-amber-500"
+                      className="accent-[#0f172a]"
                     />
                     <span>Dietary Supplement</span>
                   </label>
@@ -701,7 +873,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                   <label
                     className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-bold cursor-pointer transition-colors ${
                       quickCategory === 'สกินแคร์'
-                        ? 'border-teal-500 bg-teal-50 text-teal-900'
+                        ? 'border-[#c4e5ff] bg-[#daf0ff] text-[#0f3f77]'
                         : 'border-slate-200 bg-white text-slate-700'
                     }`}
                   >
@@ -710,7 +882,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                       name="qcat"
                       checked={quickCategory === 'สกินแคร์'}
                       onChange={() => setQuickCategory('สกินแคร์')}
-                      className="accent-teal-600"
+                      className="accent-[#0f172a]"
                     />
                     <span>Skincare</span>
                   </label>
@@ -728,7 +900,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                 <button
                   type="submit"
                   disabled={!quickName.trim()}
-                  className="px-5 py-2 text-xs font-bold text-slate-900 bg-[#ffc83b] hover:bg-amber-400 disabled:opacity-50 rounded-xl shadow-xs transition-all cursor-pointer"
+                  className="px-5 py-2 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] disabled:opacity-50 rounded-xl shadow-xs transition-all cursor-pointer"
                 >
                   Create Project
                 </button>

@@ -8,8 +8,9 @@
     --p4: #8b5cf6;
     --p5: #f43f5e;
     --p6: #475569;
-    --sunny-yellow: #ffc83b;
-    --sunny-hover: #f5b722;
+    --lime-accent: #ccf835;
+    --lime-hover: #bced28;
+    --lime-light: #f2fde0;
   }
 
   *, html, body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, .font-heading {
@@ -17,8 +18,8 @@
   }
 
   body {
-    color: #1e293b;
-    background-color: #f4f6fa;
+    color: #0f172a;
+    background-color: #f1f3f6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

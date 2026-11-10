@@ -11,6 +11,7 @@ import {
   baht,
   compute,
   costOf,
+  displayCategory,
   DOC_TYPES,
   flatTasks,
   fmt,
@@ -300,7 +301,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Header / Navigation & Actions */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div
+        className={`rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden ${
+          displayCategory(project.category) === 'Dietary Supplement'
+            ? 'border-2 border-[#84cc16] bg-gradient-to-b from-[#f7fee7]/70 via-white to-white'
+            : 'border-2 border-[#0284c7] bg-gradient-to-b from-[#f0f9ff]/70 via-white to-white'
+        }`}
+      >
+        <div
+          className={`absolute top-0 left-0 right-0 h-1.5 ${
+            displayCategory(project.category) === 'Dietary Supplement'
+              ? 'bg-[#84cc16]'
+              : 'bg-[#0284c7]'
+          }`}
+        />
         <div className="space-y-2 flex-1 min-w-0">
           <button
             onClick={onBack}
@@ -427,10 +441,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </div>
       </div>
 
-      {/* KPI Summary Banner */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+      {/* KPI Summary Banner (Niond Style Pastel & Slate Cards) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Card 1: Current Stage - Lavender */}
+        <div className="bg-[#eee8ff] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#ded5fc] shadow-2xs flex flex-col justify-between">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4d3b94] block mb-1">
             Current Stage
           </span>
           <div className="flex items-center gap-1.5">
@@ -442,52 +457,55 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 }}
               />
             )}
-            <b className="text-sm sm:text-base font-bold text-slate-900 truncate">
+            <b className="text-sm sm:text-base font-black text-[#2a1b63] truncate">
               {s.stage.name}
             </b>
           </div>
-          <span className="text-[11px] text-slate-500 mt-1 block truncate">
+          <span className="text-[11px] text-[#6954b8] mt-1 block truncate font-semibold">
             {s.currentTaskName ? `Active: ${s.currentTaskName}` : 'Phases 1 to 6'}
           </span>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+        {/* Card 2: Overall Progress - Mint */}
+        <div className="bg-[#cbf7df] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#b1f1ce] shadow-2xs flex flex-col justify-between">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0e5c36] block mb-1">
             Overall Progress
           </span>
-          <b className="text-2xl font-black text-teal-700">{s.pct}%</b>
-          <span className="text-[11px] text-slate-400 mt-1 block">
+          <b className="text-2xl sm:text-3xl font-black text-[#084225]">{s.pct}%</b>
+          <span className="text-[11px] text-[#1b7a48] mt-1 block font-semibold">
             {s.done} of {s.total} tasks completed
           </span>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+        {/* Card 3: Est. Arrival - Sky Blue */}
+        <div className="bg-[#daf0ff] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#c4e5ff] shadow-2xs flex flex-col justify-between">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#124d91] block mb-1">
             Est. Arrival Date
           </span>
-          <b className="text-sm sm:text-base font-bold text-slate-900">
+          <b className="text-sm sm:text-base font-black text-[#0f3d73]">
             {fmt(s.last)}
           </b>
-          <span className="text-[11px] text-slate-500 mt-1 block truncate font-medium">
+          <span className="text-[11px] text-[#2467b6] mt-1 block truncate font-semibold">
             {s.vs || 'Launch target not set'}
           </span>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+        {/* Card 4: Total Unit Cost */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block mb-1">
             Total Unit Cost
           </span>
           {costPrivacy ? (
-            <div className="flex items-center gap-1.5 text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg text-xs font-bold">
+            <div className="flex items-center gap-1.5 text-slate-600 bg-slate-100 px-2.5 py-1 rounded-xl text-xs font-bold font-mono">
               <EyeOff className="w-3.5 h-3.5" />
-              <span>•••••• (Hidden)</span>
+              <span>•••••• (Restricted)</span>
             </div>
           ) : (
             <div>
-              <b className="text-xl font-black text-slate-900">
+              <b className="text-xl sm:text-2xl font-black text-slate-900">
                 {co.unit > 0 ? `${baht(co.unit)} ฿` : '-'}
               </b>
-              <span className="text-[11px] text-slate-400 mt-0.5 block truncate">
+              <span className="text-[11px] text-slate-400 mt-0.5 block truncate font-medium">
                 {co.q
                   ? `Lot: ${baht(co.batch)} ฿ (${Number(co.q).toLocaleString('en-US')} pcs)`
                   : 'Enter quantity in Overview'}
@@ -497,9 +515,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </div>
       </div>
 
-      {/* Tabs Navigation (English Primary Headers as requested) */}
-      <div className="border-b border-slate-200 overflow-x-auto scrollbar-none">
-        <nav className="flex space-x-1 sm:space-x-2 min-w-max">
+      {/* Tabs Navigation (Niond-Style Lime Active Pill) */}
+      <div className="border-b border-slate-200/80 overflow-x-auto scrollbar-none pb-1">
+        <nav className="flex space-x-1.5 sm:space-x-2 min-w-max p-1 bg-slate-200/60 rounded-2xl">
           {[
             { key: 'overview', label: 'Overview' },
             { key: 'formula', label: `Formulation (${project.formulas.length})` },
@@ -511,10 +529,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key as TabKey)}
-              className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-2xl transition-all border-b-2 cursor-pointer ${
+              className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
                 activeTab === t.key
-                  ? 'border-amber-400 text-slate-900 bg-white shadow-2xs font-extrabold'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60'
+                  ? 'bg-[#ccf835] text-slate-950 shadow-xs font-extrabold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
               {t.label}
@@ -855,7 +873,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       ],
                     })
                   }
-                  className="flex items-center gap-1.5 text-xs font-bold text-slate-900 bg-[#ffc83b] hover:bg-amber-400 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                  className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Ingredient</span>
@@ -991,7 +1009,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     ],
                   })
                 }
-                className="flex items-center gap-1.5 text-xs font-bold text-slate-900 bg-[#ffc83b] hover:bg-amber-400 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Lab Test</span>
@@ -1178,7 +1196,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     ],
                   })
                 }
-                className="flex items-center gap-1.5 text-xs font-bold text-slate-900 bg-[#ffc83b] hover:bg-amber-400 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Permit</span>
@@ -1395,7 +1413,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   chosenFormula: newF.id,
                 });
               }}
-              className="flex items-center gap-1.5 text-xs font-bold text-slate-900 bg-[#ffc83b] hover:bg-amber-400 px-4 py-2 rounded-xl transition-colors cursor-pointer shadow-xs"
+              className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-4 py-2 rounded-xl transition-colors cursor-pointer shadow-xs"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>+ New Formula Iteration</span>
@@ -1515,7 +1533,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           <button
                             type="button"
                             onClick={() => handleIterateFromFormula(f)}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#ffc83b]/25 hover:bg-[#ffc83b]/50 text-amber-950 border border-amber-300 transition-colors cursor-pointer"
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-[#ccf835]/35 hover:bg-[#ccf835]/65 text-slate-950 border border-[#b2e61e] transition-colors cursor-pointer"
                             title="Create new version based on this formula"
                           >
                             <Plus className="w-3.5 h-3.5 stroke-[3]" />
@@ -1868,7 +1886,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 );
                                 update({ formulas: newFs });
                               }}
-                              className="flex items-center gap-1 text-[11px] font-bold text-slate-900 bg-[#ffc83b] hover:bg-amber-400 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              className="flex items-center gap-1 text-[11px] font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-2.5 py-1 rounded-lg transition-colors cursor-pointer shadow-2xs"
                             >
                               <Plus className="w-3 h-3" />
                               <span>Add Ingredient</span>
@@ -2038,7 +2056,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 };
                 update({ packaging: [...project.packaging, newItem] });
               }}
-              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl bg-[#ffc83b] hover:bg-amber-400 text-slate-900 transition-colors cursor-pointer shadow-xs"
+              className="flex items-center gap-1.5 text-xs font-extrabold px-4 py-2 rounded-xl bg-[#ccf835] hover:bg-[#bced28] text-slate-950 transition-colors cursor-pointer shadow-xs"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>+ Add Package</span>
@@ -2590,7 +2608,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     ],
                   })
                 }
-                className="flex items-center gap-1.5 text-xs font-bold text-slate-900 bg-[#ffc83b] hover:bg-amber-400 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Expense Item</span>
@@ -3095,7 +3113,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               {/* Upload to Google Drive Button */}
               <button
                 onClick={() => setIsDriveModalOpen(true)}
-                className="flex items-center gap-2 text-xs font-bold text-slate-950 bg-[#ffc83b] hover:bg-amber-400 px-4 py-2.5 rounded-xl transition-colors cursor-pointer shadow-xs"
+                className="flex items-center gap-2 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-4 py-2.5 rounded-xl transition-colors cursor-pointer shadow-xs"
               >
                 <Cloud className="w-4 h-4" />
                 <span>Upload to Google Drive</span>

@@ -43,8 +43,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       <div className="max-w-md w-full space-y-6">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-3xl bg-gradient-to-br from-[#ffc83b] via-amber-400 to-teal-500 flex items-center justify-center text-white mx-auto shadow-md shadow-amber-500/20">
-            <span className="text-2xl font-black">✦</span>
+          <div className="w-16 h-16 rounded-3xl overflow-hidden flex items-center justify-center mx-auto shadow-md shadow-teal-900/10 bg-white border border-slate-200 p-1.5">
+            <img
+              src="/assets/aistudio/image_5173417e.png"
+              alt="Project Tracker Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight font-heading">
             Project Tracker
@@ -88,7 +92,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder=""
-                  className="w-full text-sm pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-slate-50/50 font-medium"
+                  className="w-full text-sm pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#ccf835] bg-slate-50/50 font-medium"
                 />
               </div>
             </div>
@@ -105,7 +109,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder=""
-                  className="w-full text-sm pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-slate-50/50 font-medium"
+                  className="w-full text-sm pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#ccf835] bg-slate-50/50 font-medium"
                 />
                 <button
                   type="button"
@@ -120,9 +124,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             <button
               type="submit"
               disabled={loading || isLocked}
-              className="w-full py-2.5 px-4 rounded-xl text-sm font-bold text-slate-900 bg-[#ffc83b] hover:bg-amber-400 transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-2.5 px-4 rounded-xl text-sm font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              <KeyRound className="w-4 h-4" />
+              <KeyRound className="w-4 h-4 text-slate-900" />
               <span>{loading ? 'Verifying...' : 'Sign In'}</span>
             </button>
           </form>

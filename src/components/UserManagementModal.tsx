@@ -164,7 +164,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
             </span>
             <button
               onClick={() => setShowAddForm(!showAddForm)}
-              className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-xl bg-[#ffc83b] hover:bg-amber-400 text-slate-900 transition-colors cursor-pointer"
+              className="flex items-center gap-1 text-xs font-extrabold px-3 py-1.5 rounded-xl bg-[#ccf835] hover:bg-[#bced28] text-slate-950 transition-colors cursor-pointer shadow-2xs"
             >
               <UserPlus className="w-3.5 h-3.5" />
               <span>{showAddForm ? 'Cancel' : 'Add User'}</span>
@@ -244,7 +244,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               <div className="flex justify-end pt-1">
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-bold text-slate-900 bg-[#ffc83b] hover:bg-amber-400 rounded-xl transition-all cursor-pointer shadow-xs"
+                  className="px-4 py-2 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] rounded-xl transition-all cursor-pointer shadow-xs"
                 >
                   Create User
                 </button>
