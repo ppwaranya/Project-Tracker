@@ -555,7 +555,6 @@ export default function App() {
               project={currentProject}
               holidaysSet={holidaysSet}
               costPrivacy={effectiveCostPrivacy}
-              accessToken={null}
               isViewOnly={isViewOnly}
               onBack={() => {
                 window.location.hash = isUrlViewOnly ? 'view-only' : 'all';

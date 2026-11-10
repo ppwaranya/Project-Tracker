@@ -28,7 +28,7 @@ import {
 } from '../lib/trackerLogic';
 import { GanttChart } from './GanttChart';
 import { CostSummary } from './CostSummary';
-import { DriveUploadModal } from './DriveUploadModal';
+import { ImagePreviewModal } from './ImagePreviewModal';
 import {
   ArrowLeft,
   Copy,
@@ -58,7 +58,6 @@ interface ProjectDetailProps {
   project: Project;
   holidaysSet: Set<string>;
   costPrivacy: boolean;
-  accessToken: string | null;
   isViewOnly?: boolean;
   onBack: () => void;
   onUpdateProject: (updated: Project) => void;
@@ -72,7 +71,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   project,
   holidaysSet,
   costPrivacy,
-  accessToken,
   isViewOnly = false,
   onBack,
   onUpdateProject,
@@ -80,7 +78,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   onDeleteProject,
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
-  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{
+    src: string;
+    alt: string;
+  } | null>(null);
   const [armDelete, setArmDelete] = useState(false);
   const [copiedViewLink, setCopiedViewLink] = useState(false);
 
@@ -801,7 +802,24 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         <img
                           src={imgUrl}
                           alt={`Benchmark ${imgIdx + 1}`}
-                          className="w-full h-full object-cover"
+                          onClick={() =>
+                            setPreviewImage({
+                              src: imgUrl,
+                              alt: `Benchmark ${imgIdx + 1}`,
+                            })
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              setPreviewImage({
+                                src: imgUrl,
+                                alt: `Benchmark ${imgIdx + 1}`,
+                              });
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          className="h-full w-full cursor-zoom-in object-cover"
                         />
                         <button
                           type="button"
@@ -1416,7 +1434,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-4 py-2 rounded-xl transition-colors cursor-pointer shadow-xs"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
-              <span>+ New Formula Iteration</span>
+              <span>Create New Formula</span>
             </button>
           </div>
 
@@ -1691,7 +1709,24 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   <img
                                     src={imgUrl}
                                     alt={`Sample ${imgIdx + 1}`}
-                                    className="w-full h-full object-cover"
+                                    onClick={() =>
+                                      setPreviewImage({
+                                        src: imgUrl,
+                                        alt: `Sample ${imgIdx + 1}`,
+                                      })
+                                    }
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'Enter' || event.key === ' ') {
+                                        event.preventDefault();
+                                        setPreviewImage({
+                                          src: imgUrl,
+                                          alt: `Sample ${imgIdx + 1}`,
+                                        });
+                                      }
+                                    }}
+                                    role="button"
+                                    tabIndex={0}
+                                    className="h-full w-full cursor-zoom-in object-cover"
                                   />
                                   <button
                                     type="button"
@@ -2502,7 +2537,24 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 <img
                                   src={imgUrl}
                                   alt={`Packaging ${imgIdx + 1}`}
-                                  className="w-full h-full object-cover"
+                                  onClick={() =>
+                                    setPreviewImage({
+                                      src: imgUrl,
+                                      alt: `Packaging ${imgIdx + 1}`,
+                                    })
+                                  }
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                      event.preventDefault();
+                                      setPreviewImage({
+                                        src: imgUrl,
+                                        alt: `Packaging ${imgIdx + 1}`,
+                                      });
+                                    }
+                                  }}
+                                  role="button"
+                                  tabIndex={0}
+                                  className="h-full w-full cursor-zoom-in object-cover"
                                 />
                                 <button
                                   type="button"
@@ -3106,18 +3158,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   Project Documents & Attachments
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Upload certificates, test reports, artwork files, and contracts directly to Google Drive
+                  Attach links to certificates, test reports, artwork files, and contracts.
                 </p>
               </div>
-
-              {/* Upload to Google Drive Button */}
-              <button
-                onClick={() => setIsDriveModalOpen(true)}
-                className="flex items-center gap-2 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-4 py-2.5 rounded-xl transition-colors cursor-pointer shadow-xs"
-              >
-                <Cloud className="w-4 h-4" />
-                <span>Upload to Google Drive</span>
-              </button>
             </div>
 
             {/* External Link Input Form */}
@@ -3204,7 +3247,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         <FileText className="w-8 h-8 mx-auto text-slate-300 mb-2" />
                         <p className="font-bold">No documents attached</p>
                         <p className="text-slate-400 text-[11px] mt-0.5">
-                          Upload files to Google Drive or attach external links above.
+                          Attach an external document link using the form above.
                         </p>
                       </td>
                     </tr>
@@ -3315,15 +3358,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </div>
       )}
 
-      {/* Google Drive Upload Modal */}
-      <DriveUploadModal
-        accessToken={accessToken}
-        isOpen={isDriveModalOpen}
-        onClose={() => setIsDriveModalOpen(false)}
-        onUploaded={(newDoc) => {
-          update({ docs: [...project.docs, newDoc] });
-        }}
-      />
+      {previewImage && (
+        <ImagePreviewModal
+          src={previewImage.src}
+          alt={previewImage.alt}
+          onClose={() => setPreviewImage(null)}
+        />
+      )}
     </div>
   );
 };
