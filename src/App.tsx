@@ -4,19 +4,14 @@ import { Holiday, Project, AppUser } from './lib/types';
 import {
   DEFAULT_HOLIDAYS,
   makeProject,
-  norm,
   todayISO,
   uid,
 } from './lib/trackerLogic';
-import {
-  GoogleSheetsService,
-  SyncState,
-} from './lib/googleSheetsService';
+import { FirebaseDataService, SyncState } from './lib/firebaseDataService';
 import {
   googleSignIn,
   initAuth,
   logout,
-  getAccessToken,
   setAccessToken,
 } from './lib/auth';
 import { UserAuthService } from './lib/userAuthService';
@@ -228,13 +223,13 @@ export default function App() {
 
   // Projects & Holidays State
   const [projects, setProjects] = useState<Project[]>(() => {
-    const cached = GoogleSheetsService.getLocalProjects();
+    const cached = FirebaseDataService.getLocalProjects();
     if (cached) return cached;
     return [createSampleProject()];
   });
 
   const [holidays, setHolidays] = useState<Holiday[]>(() => {
-    const cached = GoogleSheetsService.getLocalHolidays();
+    const cached = FirebaseDataService.getLocalHolidays();
     if (cached) return cached;
     return DEFAULT_HOLIDAYS;
   });
@@ -243,9 +238,8 @@ export default function App() {
   const [syncState, setSyncState] = useState<SyncState>({
     isSynced: false,
     isSyncing: false,
+    isInitialized: false,
     lastSyncedAt: null,
-    spreadsheetId: GoogleSheetsService.getSpreadsheetId(),
-    spreadsheetUrl: GoogleSheetsService.getSpreadsheetUrl(),
     error: null,
   });
 
@@ -278,16 +272,16 @@ export default function App() {
 
   // Debounced autosave ref
   const saveTimerRef = useRef<any>(null);
-  const isDirtyRef = useRef(false);
+  const pendingProjectWritesRef = useRef<Map<string, Project>>(new Map());
+  const pendingProjectDeletesRef = useRef<Set<string>>(new Set());
 
   // Auth initialization
   useEffect(() => {
     const unsubscribe = initAuth(
-      (currentUser, accessToken) => {
-        setUser(currentUser);
-        setToken(accessToken);
+      (firebaseUser, accessToken) => {
+        setUser(firebaseUser);
+        if (accessToken) setToken(accessToken);
         setAccessToken(accessToken);
-        triggerInitialSheetsSync(accessToken);
       },
       () => {
         setUser(null);
@@ -297,6 +291,50 @@ export default function App() {
     );
 
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const handleError = (error: Error) => {
+      console.error('Firebase data listener failed:', error);
+      setSyncState((prev) => ({
+        ...prev,
+        isSynced: false,
+        error: error.message,
+      }));
+    };
+    const markConnected = () =>
+      setSyncState((prev) => ({
+        ...prev,
+        isSynced: true,
+        lastSyncedAt: new Date(),
+        error: null,
+      }));
+
+    const unsubscribeProjects = FirebaseDataService.subscribeToProjects(
+      (remoteProjects) => {
+        setProjects(remoteProjects);
+        markConnected();
+      },
+      handleError
+    );
+    const unsubscribeHolidays = FirebaseDataService.subscribeToHolidays(
+      (remoteHolidays) => {
+        setHolidays(remoteHolidays.length ? remoteHolidays : DEFAULT_HOLIDAYS);
+        markConnected();
+      },
+      handleError
+    );
+    const unsubscribeStatus = FirebaseDataService.subscribeToDatabaseStatus(
+      (isInitialized) =>
+        setSyncState((prev) => ({ ...prev, isInitialized })),
+      handleError
+    );
+
+    return () => {
+      unsubscribeProjects();
+      unsubscribeHolidays();
+      unsubscribeStatus();
+    };
   }, []);
 
   // Hash change listener
@@ -319,137 +357,49 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // Google Sheets Initial Sync when signed in
-  const triggerInitialSheetsSync = async (accessToken: string) => {
-    setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
-    try {
-      const sheetId = await GoogleSheetsService.getOrCreateSpreadsheet(accessToken);
-      const remoteProjects = await GoogleSheetsService.loadProjects(
-        accessToken,
-        sheetId
-      );
-      const remoteHolidays = await GoogleSheetsService.loadHolidays(
-        accessToken,
-        sheetId
-      );
-      const databaseInitialized =
-        await GoogleSheetsService.isDatabaseInitialized(accessToken, sheetId);
-
-      if (databaseInitialized || remoteProjects.length > 0) {
-        setProjects(remoteProjects);
-      } else {
-        // First time initialization: populate remote sheet with current projects
-        await GoogleSheetsService.saveAllProjects(
-          accessToken,
-          sheetId,
-          projects,
-          holidaysSet
-        );
-      }
-
-      if (databaseInitialized || remoteHolidays.length > 0) {
-        setHolidays(remoteHolidays);
-      } else {
-        await GoogleSheetsService.saveHolidays(accessToken, sheetId, holidays);
-      }
-
-      setSyncState({
-        isSynced: true,
-        isSyncing: false,
-        lastSyncedAt: new Date(),
-        spreadsheetId: sheetId,
-        spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${sheetId}/edit`,
-        error: null,
-      });
-
-      showToast('Connected and synced with Google Sheets');
-    } catch (err: any) {
-      console.error('Sheets sync error:', err);
-      setSyncState((prev) => ({
-        ...prev,
-        isSyncing: false,
-        error: err?.message || 'Sync failed',
-      }));
-      showToast('Could not sync with Google Sheets. Local data active.');
+  const queueSave = (projectsToSave: Project[], deletedIds: string[] = []) => {
+    if (!user) {
+      showToast('Sign in with Google to save changes to Firebase');
+      return;
     }
-  };
 
-  // Background Periodic Refresh (Every 30 seconds & on window focus)
-  useEffect(() => {
-    if (!token || !syncState.spreadsheetId) return;
+    for (const project of projectsToSave) {
+      pendingProjectWritesRef.current.set(project.id, project);
+      pendingProjectDeletesRef.current.delete(project.id);
+    }
+    for (const id of deletedIds) {
+      pendingProjectWritesRef.current.delete(id);
+      pendingProjectDeletesRef.current.add(id);
+    }
 
-    const pullUpdates = async () => {
-      if (isDirtyRef.current || syncState.isSyncing) return;
-      try {
-        const remoteProjects = await GoogleSheetsService.loadProjects(
-          token,
-          syncState.spreadsheetId!
-        );
-        const remoteHolidays = await GoogleSheetsService.loadHolidays(
-          token,
-          syncState.spreadsheetId!
-        );
-
-        setProjects(remoteProjects);
-        setHolidays(remoteHolidays);
-        setSyncState((prev) => ({ ...prev, lastSyncedAt: new Date() }));
-      } catch (e) {
-        console.error('Background Google Sheets sync failed:', e);
-        setSyncState((prev) => ({
-          ...prev,
-          error: e instanceof Error ? e.message : 'Background sync failed',
-        }));
-      }
-    };
-
-    const interval = setInterval(pullUpdates, 30000);
-    const onFocus = () => pullUpdates();
-    window.addEventListener('focus', onFocus);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [token, syncState.spreadsheetId, syncState.isSyncing]);
-
-  // Queue autosave to Google Sheets whenever projects change
-  const queueSave = (newProjects: Project[]) => {
-    isDirtyRef.current = true;
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      if (!isDirtyRef.current) return;
-      isDirtyRef.current = false;
-
-      // Always save to localStorage cache
-      localStorage.setItem(
-        'launch_tracker_projects_cache',
-        JSON.stringify(newProjects)
-      );
-
-      // If user is connected to Google Sheets, save to spreadsheet
-      if (token && syncState.spreadsheetId) {
-        setSyncState((prev) => ({ ...prev, isSyncing: true }));
-        try {
-          await GoogleSheetsService.saveAllProjects(
-            token,
-            syncState.spreadsheetId,
-            newProjects,
-            holidaysSet
-          );
-          setSyncState((prev) => ({
-            ...prev,
-            isSyncing: false,
-            isSynced: true,
-            lastSyncedAt: new Date(),
-          }));
-        } catch (err: any) {
-          setSyncState((prev) => ({
-            ...prev,
-            isSyncing: false,
-            error: err?.message || 'Save failed',
-          }));
-          showToast('Failed to save to Google Sheets. Saved locally.');
+      const upserts = [...pendingProjectWritesRef.current.values()];
+      const deletes = [...pendingProjectDeletesRef.current];
+      pendingProjectWritesRef.current.clear();
+      pendingProjectDeletesRef.current.clear();
+      setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
+      try {
+        await FirebaseDataService.saveProjectChanges(upserts, deletes);
+        setSyncState((prev) => ({
+          ...prev,
+          isSyncing: false,
+          isSynced: true,
+          lastSyncedAt: new Date(),
+        }));
+      } catch (error) {
+        for (const project of upserts) {
+          pendingProjectWritesRef.current.set(project.id, project);
         }
+        for (const id of deletes) pendingProjectDeletesRef.current.add(id);
+        const message =
+          error instanceof Error ? error.message : 'Firebase save failed';
+        setSyncState((prev) => ({
+          ...prev,
+          isSyncing: false,
+          error: message,
+        }));
+        showToast(`Could not save to Firebase: ${message}`);
       }
     }, 700);
   };
@@ -478,12 +428,47 @@ export default function App() {
       if (res) {
         setUser(res.user);
         setToken(res.accessToken);
-        triggerInitialSheetsSync(res.accessToken);
+        setAccessToken(res.accessToken);
       }
     } catch (err) {
       console.error(err);
-      showToast('Google sign-in was cancelled or encountered an error');
+      showToast('Google sign-in failed. Firebase changes require a signed-in account.');
     } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleImportSheets = async () => {
+    if (currentUser?.role !== 'Admin') {
+      showToast('Only an Admin can import the Google Sheets database');
+      return;
+    }
+
+    setIsLoggingIn(true);
+    setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
+    try {
+      const res = await googleSignIn();
+      if (!res) throw new Error('Google sign-in did not return credentials.');
+      setUser(res.user);
+      setToken(res.accessToken);
+      setAccessToken(res.accessToken);
+
+      const imported = await FirebaseDataService.importFromGoogleSheets(
+        res.accessToken
+      );
+      showToast(
+        imported
+          ? 'Google Sheets data imported to Firebase'
+          : 'Firebase is already initialized; no data was imported'
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Google Sheets import failed';
+      console.error('Google Sheets to Firebase import failed:', error);
+      setSyncState((prev) => ({ ...prev, error: message }));
+      showToast(`Could not import Google Sheets: ${message}`);
+    } finally {
+      setSyncState((prev) => ({ ...prev, isSyncing: false }));
       setIsLoggingIn(false);
     }
   };
@@ -495,44 +480,52 @@ export default function App() {
     setSyncState((prev) => ({
       ...prev,
       isSynced: false,
-      spreadsheetUrl: null,
     }));
-    showToast('Signed out from Google');
+    showToast('Signed out of Firebase');
   };
 
   const isViewOnly = Boolean(isUrlViewOnly || currentUser?.role === 'Viewer');
   const effectiveCostPrivacy = isViewOnly ? true : costPrivacy;
+  const canWriteToFirebase = () => {
+    if (isViewOnly) {
+      showToast('Action not allowed in View-Only mode');
+      return false;
+    }
+    if (!syncState.isInitialized) {
+      showToast('Import the existing Google Sheets data before editing');
+      return false;
+    }
+    if (!user) {
+      showToast('Sign in with Google before editing shared Firebase data');
+      return false;
+    }
+    return true;
+  };
 
   // Project CRUD handlers
   const handleCreateProject = (
     name: string,
     category: 'อาหารเสริม' | 'สกินแคร์'
   ) => {
-    if (isViewOnly) {
-      showToast('Action not allowed in View-Only mode');
-      return;
-    }
+    if (!canWriteToFirebase()) return;
     const newProj = makeProject(category);
     newProj.name = name;
     const updated = [newProj, ...projects];
     setProjects(updated);
-    queueSave(updated);
+    queueSave([newProj]);
     window.location.hash = isUrlViewOnly ? `p-${newProj.id}&view-only` : `p-${newProj.id}`;
     showToast(`Created project "${name}"`);
   };
 
   const handleUpdateProject = (updated: Project) => {
-    if (isViewOnly) return;
+    if (!canWriteToFirebase()) return;
     const next = projects.map((p) => (p.id === updated.id ? updated : p));
     setProjects(next);
-    queueSave(next);
+    queueSave([updated]);
   };
 
   const handleDuplicateProject = (orig: Project) => {
-    if (isViewOnly) {
-      showToast('Action not allowed in View-Only mode');
-      return;
-    }
+    if (!canWriteToFirebase()) return;
     const copy = JSON.parse(JSON.stringify(orig)) as Project;
     copy.id = uid();
     copy.name = `${copy.name || 'Project'} (สำเนา)`;
@@ -549,58 +542,43 @@ export default function App() {
 
     const updated = [copy, ...projects];
     setProjects(updated);
-    queueSave(updated);
+    queueSave([copy]);
     window.location.hash = isUrlViewOnly ? `p-${copy.id}&view-only` : `p-${copy.id}`;
     showToast('Project duplicated successfully');
   };
 
   const handleDeleteProject = (id: string) => {
-    if (isViewOnly) {
-      showToast('Action not allowed in View-Only mode');
-      return;
-    }
+    if (!canWriteToFirebase()) return;
     const updated = projects.filter((p) => p.id !== id);
     setProjects(updated);
-    queueSave(updated);
+    queueSave([], [id]);
     window.location.hash = isUrlViewOnly ? 'view-only' : 'all';
     showToast('Project deleted');
   };
 
   const handleSaveHolidays = async (newHolidays: Holiday[]) => {
-    if (isViewOnly) {
-      showToast('Action not allowed in View-Only mode');
-      return;
-    }
+    if (!canWriteToFirebase()) return;
     setHolidays(newHolidays);
-    localStorage.setItem(
-      'launch_tracker_holidays_cache',
-      JSON.stringify(newHolidays)
-    );
-
-    if (token && syncState.spreadsheetId) {
-      setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
-      try {
-        await GoogleSheetsService.saveHolidays(
-          token,
-          syncState.spreadsheetId,
-          newHolidays
-        );
-        setSyncState((prev) => ({
-          ...prev,
-          isSyncing: false,
-          isSynced: true,
-          lastSyncedAt: new Date(),
-        }));
-      } catch (err) {
-        console.error('Failed to save holidays to Google Sheets:', err);
-        setSyncState((prev) => ({
-          ...prev,
-          isSyncing: false,
-          error: err instanceof Error ? err.message : 'Holiday save failed',
-        }));
-        showToast('Holidays saved locally, but Google Sheets sync failed');
-        return;
-      }
+    setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
+    try {
+      await FirebaseDataService.saveHolidays(newHolidays);
+      setSyncState((prev) => ({
+        ...prev,
+        isSyncing: false,
+        isSynced: true,
+        lastSyncedAt: new Date(),
+      }));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Holiday save failed';
+      console.error('Failed to save holidays to Firebase:', error);
+      setSyncState((prev) => ({
+        ...prev,
+        isSyncing: false,
+        error: message,
+      }));
+      showToast(`Could not save holidays to Firebase: ${message}`);
+      return;
     }
     showToast('Holidays updated');
   };
@@ -641,9 +619,7 @@ export default function App() {
         costPrivacy={effectiveCostPrivacy}
         onToggleCostPrivacy={handleToggleCostPrivacy}
         syncState={syncState}
-        onManualSync={() => {
-          if (token) triggerInitialSheetsSync(token);
-        }}
+        onImportSheets={handleImportSheets}
         onOpenHolidays={() => setIsHolidayModalOpen(true)}
       />
 

@@ -5,17 +5,11 @@ const SPREADSHEET_TITLE = 'Launch Tracker Database';
 const CACHE_KEY_PROJECTS = 'launch_tracker_projects_cache';
 const CACHE_KEY_HOLIDAYS = 'launch_tracker_holidays_cache';
 const CACHE_KEY_SHEET_ID = 'launch_tracker_sheet_id';
+const DEFAULT_MIGRATION_SPREADSHEET_ID =
+  '1tnOTBo9PyEty2aW5R2fy5mVQ6HtdKPq5u4wr-ZVEzWM';
 const CONFIGURED_SPREADSHEET_ID =
-  import.meta.env.VITE_GOOGLE_SHEETS_ID?.trim() || null;
-
-export interface SyncState {
-  isSynced: boolean;
-  isSyncing: boolean;
-  lastSyncedAt: Date | null;
-  spreadsheetId: string | null;
-  spreadsheetUrl: string | null;
-  error: string | null;
-}
+  import.meta.env.VITE_GOOGLE_SHEETS_ID?.trim() ||
+  DEFAULT_MIGRATION_SPREADSHEET_ID;
 
 const PROJECT_HEADERS = [
   'ID',
@@ -183,6 +177,10 @@ export class GoogleSheetsService {
     return this.cachedSpreadsheetId
       ? `https://docs.google.com/spreadsheets/d/${this.cachedSpreadsheetId}/edit`
       : null;
+  }
+
+  static getMigrationSpreadsheetId(): string | null {
+    return CONFIGURED_SPREADSHEET_ID || this.cachedSpreadsheetId;
   }
 
   // Find existing spreadsheet or create a new one

@@ -5,7 +5,6 @@ import {
   Eye,
   EyeOff,
   RefreshCw,
-  ExternalLink,
   Calendar,
   Sparkles,
   Users,
@@ -13,7 +12,7 @@ import {
   ShieldCheck,
   Eye as EyeIcon,
 } from 'lucide-react';
-import { SyncState } from '../lib/googleSheetsService';
+import { SyncState } from '../lib/firebaseDataService';
 
 interface HeaderProps {
   currentUser: AppUser | null;
@@ -27,7 +26,7 @@ interface HeaderProps {
   costPrivacy: boolean;
   onToggleCostPrivacy: () => void;
   syncState: SyncState;
-  onManualSync: () => void;
+  onImportSheets: () => void;
   onOpenHolidays: () => void;
 }
 
@@ -43,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
   costPrivacy,
   onToggleCostPrivacy,
   syncState,
-  onManualSync,
+  onImportSheets,
   onOpenHolidays,
 }) => {
   const isAdmin = currentUser?.role === 'Admin';
@@ -152,57 +151,69 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Google Sheets Sync (Only for Admin to sync database) */}
-            {isAdmin && (
-              <>
-                {googleUser ? (
-                  <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 rounded-xl p-1 text-xs">
-                    <button
-                      onClick={onManualSync}
-                      disabled={syncState.isSyncing}
-                      title={
-                        syncState.error ||
-                        'Sync with Google Sheets database'
-                      }
-                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-emerald-900 hover:bg-emerald-100/70 transition-colors cursor-pointer disabled:opacity-50 font-semibold text-[11px]"
-                    >
-                      <RefreshCw
-                        className={`w-3 h-3 text-emerald-600 ${
-                          syncState.isSyncing ? 'animate-spin' : ''
-                        }`}
-                      />
-                      <span className="hidden md:inline">
-                        {syncState.isSyncing ? 'Syncing...' : 'Sheets'}
-                      </span>
-                    </button>
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-bold ${
+                syncState.isSynced
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : 'bg-slate-100 border-slate-200 text-slate-600'
+              }`}
+              title={syncState.error || 'Live project data stored in Firebase'}
+            >
+              <RefreshCw
+                className={`w-3 h-3 ${
+                  syncState.isSyncing ? 'animate-spin' : ''
+                }`}
+              />
+              <span className="hidden sm:inline">
+                {syncState.isSyncing
+                  ? 'Saving...'
+                  : syncState.isSynced
+                    ? 'Firebase Live'
+                    : 'Firebase'}
+              </span>
+            </div>
 
-                    {syncState.spreadsheetUrl && (
-                      <a
-                        href={syncState.spreadsheetUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Open in Google Sheets"
-                        className="p-1 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-white/80 transition-colors"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
-                  </div>
-                ) : (
-                  /* Compact Google Connection button as requested */
-                  <button
-                    onClick={onGoogleLogin}
-                    disabled={isLoggingIn}
-                    title="Connect Google account for Google Sheets sync"
-                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold px-2.5 py-1.5 rounded-xl border border-slate-200 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <Sparkles className="w-3 h-3 text-amber-500" />
-                    <span className="hidden sm:inline">
-                      {isLoggingIn ? '...' : 'Connect Sheets'}
-                    </span>
-                  </button>
-                )}
-              </>
+            {isAdmin && (
+              <button
+                onClick={onImportSheets}
+                disabled={isLoggingIn || syncState.isSyncing || syncState.isInitialized}
+                title={
+                  syncState.isInitialized
+                    ? 'Google Sheets data has already been imported'
+                    : 'Import existing Google Sheets data into Firebase'
+                }
+                className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold px-2.5 py-1.5 rounded-xl border border-slate-200 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Sparkles className="w-3 h-3 text-amber-500" />
+                <span className="hidden md:inline">
+                  {syncState.isInitialized ? 'Sheets Imported' : 'Import Sheets'}
+                </span>
+              </button>
+            )}
+
+            {googleUser ? (
+              <button
+                onClick={onGoogleLogout}
+                title={`Firebase account: ${googleUser.email || googleUser.displayName || 'Google user'} (sign out)`}
+                className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 transition-colors cursor-pointer"
+              >
+                <span className="hidden sm:inline">
+                  {googleUser.displayName || 'Google connected'}
+                </span>
+                <span className="sm:hidden">Google</span>
+              </button>
+            ) : (
+              <button
+                onClick={onGoogleLogin}
+                disabled={isLoggingIn}
+                title="Sign in with Google to edit shared Firebase data"
+                className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold px-2.5 py-1.5 rounded-xl border border-slate-200 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Sparkles className="w-3 h-3 text-amber-500" />
+                <span className="hidden sm:inline">
+                  {isLoggingIn ? '...' : 'Connect Google'}
+                </span>
+              </button>
             )}
 
             {/* Logged in User Profile & Sign Out */}

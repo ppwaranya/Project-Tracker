@@ -7,10 +7,12 @@ import {
   signOut,
   User,
 } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
+export const db = getFirestore(app);
 
 const provider = new GoogleAuthProvider();
 // Workspace scopes requested by the user
@@ -19,21 +21,13 @@ provider.addScope('https://www.googleapis.com/auth/drive.file');
 
 // In-memory token storage (MANDATORY per security constraints: never store in localStorage)
 let cachedAccessToken: string | null = null;
-let isSigningIn = false;
-
 export const initAuth = (
-  onAuthSuccess?: (user: User, token: string) => void,
+  onAuthSuccess?: (user: User, token: string | null) => void,
   onAuthFailure?: () => void
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        // Token needs refreshing or first sign-in popup
-        cachedAccessToken = null;
-        if (onAuthFailure) onAuthFailure();
-      }
+      if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
     } else {
       cachedAccessToken = null;
       if (onAuthFailure) onAuthFailure();
@@ -46,7 +40,6 @@ export const googleSignIn = async (): Promise<{
   accessToken: string;
 } | null> => {
   try {
-    isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
@@ -57,8 +50,6 @@ export const googleSignIn = async (): Promise<{
   } catch (error: any) {
     console.error('Sign in error:', error);
     throw error;
-  } finally {
-    isSigningIn = false;
   }
 };
 
