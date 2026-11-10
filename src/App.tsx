@@ -1,0 +1,701 @@
+import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { User } from 'firebase/auth';
+import { Holiday, Project, AppUser } from './lib/types';
+import {
+  DEFAULT_HOLIDAYS,
+  makeProject,
+  norm,
+  todayISO,
+  uid,
+} from './lib/trackerLogic';
+import {
+  GoogleSheetsService,
+  SyncState,
+} from './lib/googleSheetsService';
+import {
+  googleSignIn,
+  initAuth,
+  logout,
+  getAccessToken,
+  setAccessToken,
+} from './lib/auth';
+import { UserAuthService } from './lib/userAuthService';
+import { Header } from './components/Header';
+import { ProjectList } from './components/ProjectList';
+import { ProjectDetail } from './components/ProjectDetail';
+import { HolidayModal } from './components/HolidayModal';
+import { LoginScreen } from './components/LoginScreen';
+import { UserManagementModal } from './components/UserManagementModal';
+
+// Sample demo project for fresh users
+const createSampleProject = (): Project => {
+  const p = makeProject('อาหารเสริม');
+  p.name = 'คอลลาเจนเปปไทด์ รสพีช (Peach Collagen Peptide)';
+  p.owner = 'Waranya (Product Manager)';
+  p.factory = 'BioLab OEM Factory';
+  p.startDate = todayISO();
+  p.launchTarget = '';
+  p.qty = 5000;
+  p.pack = '30 ซอง / กล่อง (ซองละ 10 กรัม)';
+  p.packNote = 'กล่องพิมพ์ฟอยล์สีทอง ซองอะลูมิเนียมพิมพ์ 4 สี บรรจุลังละ 24 กล่อง';
+  p.benefit =
+    'เครื่องดื่มคอลลาเจนไดเปปไทด์และไตรเปปไทด์ บำรุงผิวพรรณกระจ่างใส รสพีชญี่ปุ่น หอมสดชื่น ทานง่าย ไม่มีกลิ่นคาว เน้นกลุ่มลูกค้าวัยทำงาน 25-40 ปี';
+
+  p.ingredients = [
+    {
+      id: uid(),
+      name: 'Fish Collagen Dipeptide',
+      amount: '5,000 mg',
+      note: 'โมเลกุลขนาดเล็ก ดูดซึมไว นำเข้าจากญี่ปุ่น',
+    },
+    {
+      id: uid(),
+      name: 'Peach Juice Powder',
+      amount: '2,500 mg',
+      note: 'รสชาติและกลิ่นธรรมชาติ',
+    },
+    {
+      id: uid(),
+      name: 'Vitamin C (Ascorbic Acid)',
+      amount: '60 mg',
+      note: 'ส่งเสริมการสร้างคอลลาเจน',
+    },
+    {
+      id: uid(),
+      name: 'Ceramide from Rice Extract',
+      amount: '30 mg',
+      note: 'กักเก็บความชุ่มชื้นให้ผิว',
+    },
+  ];
+
+  p.tests = [
+    {
+      id: uid(),
+      name: 'Stability test (Accelerated 3M)',
+      lab: 'Central Lab Thai',
+      date: todayISO(),
+      status: 'ส่งแล้ว / รอผล',
+      note: 'ติดตามสี กลิ่น และความชื้น',
+    },
+    {
+      id: uid(),
+      name: 'Heavy metals (โลหะหนัก 4 ชนิด)',
+      lab: 'ALS Laboratory',
+      date: '',
+      status: 'ยังไม่ส่ง',
+      note: 'ตะกั่ว สารหนู ปรอท แคดเมียม',
+    },
+    {
+      id: uid(),
+      name: 'Nutrition facts (คุณค่าทางโภชนาการ)',
+      lab: 'สถาบันอาหาร (NFI)',
+      date: '',
+      status: 'ยังไม่ส่ง',
+      note: 'สำหรับพิมพ์ฉลากโภชนาการ',
+    },
+  ];
+
+  p.lotNo = 'Lot 01/2026';
+  p.uspClaims =
+    'คอลลาเจนไดเปปไทด์ชนิดพรีเมียม ดูดซึมไวกว่าคอลลาเจนทั่วไป 5 เท่า ผสานเซราไมด์สกัดจากข้าวญี่ปุ่น รสชาติพีชหอมสดชื่น ดื่มง่าย ไม่มีกลิ่นคาว น้ำตาล 0% แคลอรีต่ำ ให้ผลลัพธ์ผิวชุ่มชื้นและยืดหยุ่นใน 14 วัน';
+  p.benchmark = {
+    name: 'Japanese Peach Collagen Sachet (Brand A)',
+    targetPrice: '590 - 690 บาท / กล่อง (30 ซอง)',
+    description:
+      'สินค้าขายดีอันดับหนึ่งในหมวดผิวพรรณ จุดเด่นคือการละลายในน้ำเย็นได้รวดเร็ว รสชาติหอมพีชธรรมชาติ ไม่มีรสเปรี้ยวแหลม และกล่องดีไซน์พรีเมียมเปิดแบบสไลด์',
+  };
+
+  p.regulatory = [
+    {
+      id: uid(),
+      name: 'ขออนุญาตขึ้นทะเบียนผลิตภัณฑ์เสริมอาหาร (อย.)',
+      agency: 'สำนักงานคณะกรรมการอาหารและยา (อย.)',
+      submissionDate: todayISO(),
+      licenseNo: '10-1-04760-5-0021',
+      status: 'อนุมัติแล้ว',
+      note: 'ได้รับเลขสารบบอาหารเรียบร้อยแล้ว',
+    },
+    {
+      id: uid(),
+      name: 'ใบอนุญาตโฆษณาอาหาร (ฆอ.)',
+      agency: 'สำนักงานคณะกรรมการอาหารและยา (อย.)',
+      submissionDate: todayISO(),
+      licenseNo: 'ฆอ. 1284/2569',
+      status: 'ยื่นแล้ว / รอพิจารณา',
+      note: 'ยื่นตรวจข้อความและภาพสื่อโฆษณาออนไลน์',
+    },
+    {
+      id: uid(),
+      name: 'หนังสือรับรองเครื่องหมายฮาลาล (Halal Certification)',
+      agency: 'สำนักงานคณะกรรมการกลางอิสลามแห่งประเทศไทย',
+      submissionDate: '',
+      licenseNo: '',
+      status: 'รอเตรียมเอกสาร',
+      note: 'เตรียมเอกสารตรวจโรงงานและวัตถุดิบเจลาติน',
+    },
+  ];
+
+  p.formulas[0].code = 'RD-COLL-2026-V1';
+  p.formulas[0].isConfirmed = true;
+  p.formulas[0].steps = [
+    { qty: 1000, price: 42.0 },
+    { qty: 3000, price: 38.5 },
+    { qty: 5000, price: 34.0 },
+    { qty: 10000, price: 29.5 },
+  ];
+
+  p.packaging = [
+    {
+      id: uid(),
+      type: 'Primary Package',
+      name: 'ซองอลูมิเนียมฟอยล์ ฟู้ดเกรด พิมพ์ 4 สี',
+      supplier: 'Thai Foil Packaging',
+      spec: 'กว้าง 4 ซม. ยาว 14 ซม. ฉีกง่าย',
+      moq: 5000,
+      plateCost: 3500,
+      leadTime: '15 วันทำการ',
+      paymentTerm: 'มัดจำ 50%, 50% ก่อนส่งมอบ',
+      warrantyTerms: 'ตรวจรับใน 7 วัน ชำรุดเกิน 1% เคลมฟรี',
+      selectedForCost: true,
+      status: 'In Production',
+      steps: [
+        { qty: 3000, price: 2.2 },
+        { qty: 5000, price: 1.8 },
+        { qty: 10000, price: 1.4 },
+      ],
+      note: 'รวมค่าบล็อกสี 3,500 บาท เฉลี่ยในต้นทุน',
+    },
+    {
+      id: uid(),
+      type: 'Secondary Package',
+      name: 'กล่องกระดาษเคลือบด้าน ปั๊มฟอยล์ทอง',
+      supplier: 'Siam Paper Box Co.',
+      spec: 'กระดาษอาร์ตการ์ด 350 แกรม',
+      moq: 3000,
+      plateCost: 4500,
+      leadTime: '14 วันทำการหลังอนุมัติแบบ',
+      paymentTerm: 'มัดจำ 50%, 50% ในวันส่งสินค้า',
+      warrantyTerms: 'รับประกันสีพิมพ์ตรงตามปรู๊ฟดิจิทัล',
+      selectedForCost: true,
+      status: 'Design Approved',
+      steps: [
+        { qty: 3000, price: 12.0 },
+        { qty: 5000, price: 9.5 },
+      ],
+      note: 'ค่าบล็อกปั๊มฟอยล์ทอง 4,500 บาท',
+    },
+  ];
+
+  p.other = [
+    {
+      id: uid(),
+      name: 'ค่าโอเปอเรชั่นและแพ็คกิ้ง',
+      unit: 'ชิ้น',
+      amount: 3.5,
+      note: 'รวมแรงงานบรรจุลงกล่อง',
+    },
+    {
+      id: uid(),
+      name: 'ค่าขนส่งสินค้ามาคลังเรา',
+      unit: 'เที่ยว',
+      amount: 2500,
+      times: 1,
+      note: 'รถบรรทุก 4 ล้อใหญ่',
+    },
+  ];
+
+  return p;
+};
+
+export default function App() {
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
+    UserAuthService.initDefaultUsers();
+    return UserAuthService.getCurrentSession();
+  });
+  const [isUrlViewOnly, setIsUrlViewOnly] = useState<boolean>(() => {
+    return UserAuthService.isUrlViewOnly();
+  });
+  const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
+
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Cost Privacy Mode (Presentation Mode) - Default loaded from localStorage
+  const [costPrivacy, setCostPrivacy] = useState<boolean>(() => {
+    return localStorage.getItem('launch_tracker_cost_privacy') === 'true';
+  });
+
+  // Projects & Holidays State
+  const [projects, setProjects] = useState<Project[]>(() => {
+    const cached = GoogleSheetsService.getLocalProjects();
+    if (cached && cached.length > 0) return cached;
+    return [createSampleProject()];
+  });
+
+  const [holidays, setHolidays] = useState<Holiday[]>(() => {
+    const cached = GoogleSheetsService.getLocalHolidays();
+    if (cached && cached.length > 0) return cached;
+    return DEFAULT_HOLIDAYS;
+  });
+
+  // Sync state
+  const [syncState, setSyncState] = useState<SyncState>({
+    isSynced: false,
+    isSyncing: false,
+    lastSyncedAt: null,
+    spreadsheetId: GoogleSheetsService.getSpreadsheetId(),
+    spreadsheetUrl: GoogleSheetsService.getSpreadsheetUrl(),
+    error: null,
+  });
+
+  // Navigation hash routing (#all, #p-{id}, #view-only)
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(() => {
+    const hash = window.location.hash.replace(/^#/, '');
+    const pMatch = hash.match(/p-([^&]+)/);
+    if (pMatch) return pMatch[1];
+    if (hash.startsWith('p-')) return hash.slice(2);
+    return null;
+  });
+
+  // Holidays Modal
+  const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
+
+  // Toast notification
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<any>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Holidays Set for fast lookup in date math
+  const holidaysSet = useMemo(() => {
+    return new Set(holidays.map((h) => h.date).filter(Boolean));
+  }, [holidays]);
+
+  // Debounced autosave ref
+  const saveTimerRef = useRef<any>(null);
+  const isDirtyRef = useRef(false);
+
+  // Auth initialization
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (currentUser, accessToken) => {
+        setUser(currentUser);
+        setToken(accessToken);
+        setAccessToken(accessToken);
+        triggerInitialSheetsSync(accessToken);
+      },
+      () => {
+        setUser(null);
+        setToken(null);
+        setAccessToken(null);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // Hash change listener
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace(/^#/, '');
+      setIsUrlViewOnly(UserAuthService.isUrlViewOnly());
+      const pMatch = hash.match(/p-([^&]+)/);
+      if (pMatch) {
+        setCurrentProjectId(pMatch[1]);
+      } else if (hash.startsWith('p-')) {
+        setCurrentProjectId(hash.slice(2));
+      } else {
+        setCurrentProjectId(null);
+      }
+      window.scrollTo(0, 0);
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Google Sheets Initial Sync when signed in
+  const triggerInitialSheetsSync = async (accessToken: string) => {
+    setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
+    try {
+      const sheetId = await GoogleSheetsService.getOrCreateSpreadsheet(accessToken);
+      const remoteProjects = await GoogleSheetsService.loadProjects(
+        accessToken,
+        sheetId
+      );
+      const remoteHolidays = await GoogleSheetsService.loadHolidays(
+        accessToken,
+        sheetId
+      );
+
+      if (remoteProjects.length > 0) {
+        setProjects(remoteProjects);
+      } else {
+        // First time initialization: populate remote sheet with current projects
+        await GoogleSheetsService.saveAllProjects(
+          accessToken,
+          sheetId,
+          projects,
+          holidaysSet
+        );
+      }
+
+      if (remoteHolidays.length > 0) {
+        setHolidays(remoteHolidays);
+      } else {
+        await GoogleSheetsService.saveHolidays(accessToken, sheetId, holidays);
+      }
+
+      setSyncState({
+        isSynced: true,
+        isSyncing: false,
+        lastSyncedAt: new Date(),
+        spreadsheetId: sheetId,
+        spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${sheetId}/edit`,
+        error: null,
+      });
+
+      showToast('Connected and synced with Google Sheets');
+    } catch (err: any) {
+      console.error('Sheets sync error:', err);
+      setSyncState((prev) => ({
+        ...prev,
+        isSyncing: false,
+        error: err?.message || 'Sync failed',
+      }));
+      showToast('Could not sync with Google Sheets. Local data active.');
+    }
+  };
+
+  // Background Periodic Refresh (Every 30 seconds & on window focus)
+  useEffect(() => {
+    if (!token || !syncState.spreadsheetId) return;
+
+    const pullUpdates = async () => {
+      if (isDirtyRef.current || syncState.isSyncing) return;
+      try {
+        const remoteProjects = await GoogleSheetsService.loadProjects(
+          token,
+          syncState.spreadsheetId!
+        );
+        const remoteHolidays = await GoogleSheetsService.loadHolidays(
+          token,
+          syncState.spreadsheetId!
+        );
+
+        if (remoteProjects.length > 0) {
+          setProjects(remoteProjects);
+        }
+        if (remoteHolidays.length > 0) {
+          setHolidays(remoteHolidays);
+        }
+        setSyncState((prev) => ({ ...prev, lastSyncedAt: new Date() }));
+      } catch (e) {
+        // Silent background pull fail
+      }
+    };
+
+    const interval = setInterval(pullUpdates, 30000);
+    const onFocus = () => pullUpdates();
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [token, syncState.spreadsheetId, syncState.isSyncing]);
+
+  // Queue autosave to Google Sheets whenever projects change
+  const queueSave = (newProjects: Project[]) => {
+    isDirtyRef.current = true;
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      if (!isDirtyRef.current) return;
+      isDirtyRef.current = false;
+
+      // Always save to localStorage cache
+      localStorage.setItem(
+        'launch_tracker_projects_cache',
+        JSON.stringify(newProjects)
+      );
+
+      // If user is connected to Google Sheets, save to spreadsheet
+      if (token && syncState.spreadsheetId) {
+        setSyncState((prev) => ({ ...prev, isSyncing: true }));
+        try {
+          await GoogleSheetsService.saveAllProjects(
+            token,
+            syncState.spreadsheetId,
+            newProjects,
+            holidaysSet
+          );
+          setSyncState((prev) => ({
+            ...prev,
+            isSyncing: false,
+            isSynced: true,
+            lastSyncedAt: new Date(),
+          }));
+        } catch (err: any) {
+          setSyncState((prev) => ({
+            ...prev,
+            isSyncing: false,
+            error: err?.message || 'Save failed',
+          }));
+          showToast('Failed to save to Google Sheets. Saved locally.');
+        }
+      }
+    }, 700);
+  };
+
+  // Toggle Cost Privacy
+  const handleToggleCostPrivacy = () => {
+    if (isViewOnly) {
+      showToast('Cost figures are restricted for Viewer role');
+      return;
+    }
+    const nextVal = !costPrivacy;
+    setCostPrivacy(nextVal);
+    localStorage.setItem('launch_tracker_cost_privacy', String(nextVal));
+    showToast(
+      nextVal
+        ? 'Presentation Mode Enabled — Unit costs and budgets are now hidden'
+        : 'Presentation Mode Disabled — Cost figures are visible'
+    );
+  };
+
+  // Google Login handler
+  const handleLogin = async () => {
+    setIsLoggingIn(true);
+    try {
+      const res = await googleSignIn();
+      if (res) {
+        setUser(res.user);
+        setToken(res.accessToken);
+        triggerInitialSheetsSync(res.accessToken);
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Google sign-in was cancelled or encountered an error');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    setUser(null);
+    setToken(null);
+    setSyncState((prev) => ({
+      ...prev,
+      isSynced: false,
+      spreadsheetUrl: null,
+    }));
+    showToast('Signed out from Google');
+  };
+
+  const isViewOnly = Boolean(isUrlViewOnly || currentUser?.role === 'Viewer');
+  const effectiveCostPrivacy = isViewOnly ? true : costPrivacy;
+
+  // Project CRUD handlers
+  const handleCreateProject = (
+    name: string,
+    category: 'อาหารเสริม' | 'สกินแคร์'
+  ) => {
+    if (isViewOnly) {
+      showToast('Action not allowed in View-Only mode');
+      return;
+    }
+    const newProj = makeProject(category);
+    newProj.name = name;
+    const updated = [newProj, ...projects];
+    setProjects(updated);
+    queueSave(updated);
+    window.location.hash = isUrlViewOnly ? `p-${newProj.id}&view-only` : `p-${newProj.id}`;
+    showToast(`Created project "${name}"`);
+  };
+
+  const handleUpdateProject = (updated: Project) => {
+    if (isViewOnly) return;
+    const next = projects.map((p) => (p.id === updated.id ? updated : p));
+    setProjects(next);
+    queueSave(next);
+  };
+
+  const handleDuplicateProject = (orig: Project) => {
+    if (isViewOnly) {
+      showToast('Action not allowed in View-Only mode');
+      return;
+    }
+    const copy = JSON.parse(JSON.stringify(orig)) as Project;
+    copy.id = uid();
+    copy.name = `${copy.name || 'Project'} (สำเนา)`;
+    copy.createdAt = Date.now();
+    copy.rev = 0;
+    copy.docs = [];
+    copy.tests.forEach((t) => {
+      t.status = 'ยังไม่ส่ง';
+      t.date = '';
+    });
+    copy.phases.forEach((ph) => {
+      ph.tasks.forEach((t) => (t.done = false));
+    });
+
+    const updated = [copy, ...projects];
+    setProjects(updated);
+    queueSave(updated);
+    window.location.hash = isUrlViewOnly ? `p-${copy.id}&view-only` : `p-${copy.id}`;
+    showToast('Project duplicated successfully');
+  };
+
+  const handleDeleteProject = (id: string) => {
+    if (isViewOnly) {
+      showToast('Action not allowed in View-Only mode');
+      return;
+    }
+    const updated = projects.filter((p) => p.id !== id);
+    setProjects(updated);
+    queueSave(updated);
+    window.location.hash = isUrlViewOnly ? 'view-only' : 'all';
+    showToast('Project deleted');
+  };
+
+  const handleSaveHolidays = async (newHolidays: Holiday[]) => {
+    if (isViewOnly) {
+      showToast('Action not allowed in View-Only mode');
+      return;
+    }
+    setHolidays(newHolidays);
+    localStorage.setItem(
+      'launch_tracker_holidays_cache',
+      JSON.stringify(newHolidays)
+    );
+
+    if (token && syncState.spreadsheetId) {
+      try {
+        await GoogleSheetsService.saveHolidays(
+          token,
+          syncState.spreadsheetId,
+          newHolidays
+        );
+      } catch {}
+    }
+    showToast('Holidays updated');
+  };
+
+  // If not logged in and URL does not request View-Only mode, show Login Screen
+  if (!currentUser && !isUrlViewOnly) {
+    return (
+      <LoginScreen
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+          showToast(`Welcome back, ${user.displayName || user.username}`);
+        }}
+        onEnterViewOnly={() => {
+          window.location.hash = 'view-only';
+          setIsUrlViewOnly(true);
+        }}
+      />
+    );
+  }
+
+  const currentProject = projects.find((p) => p.id === currentProjectId);
+
+  return (
+    <div className="min-h-screen bg-slate-100/50 flex flex-col font-sans">
+      <Header
+        currentUser={currentUser}
+        onAppLogout={() => {
+          UserAuthService.logout();
+          setCurrentUser(null);
+          showToast('Signed out of Project Tracker');
+        }}
+        onOpenUserManagement={() => setIsUserManagementOpen(true)}
+        isViewOnly={isViewOnly}
+        googleUser={user}
+        onGoogleLogin={handleLogin}
+        onGoogleLogout={handleLogout}
+        isLoggingIn={isLoggingIn}
+        costPrivacy={effectiveCostPrivacy}
+        onToggleCostPrivacy={handleToggleCostPrivacy}
+        syncState={syncState}
+        onManualSync={() => {
+          if (token) triggerInitialSheetsSync(token);
+        }}
+        onOpenHolidays={() => setIsHolidayModalOpen(true)}
+      />
+
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+        {currentProjectId ? (
+          currentProject ? (
+            <ProjectDetail
+              project={currentProject}
+              holidaysSet={holidaysSet}
+              costPrivacy={effectiveCostPrivacy}
+              accessToken={token}
+              isViewOnly={isViewOnly}
+              onBack={() => {
+                window.location.hash = isUrlViewOnly ? 'view-only' : 'all';
+              }}
+              onUpdateProject={handleUpdateProject}
+              onDuplicateProject={handleDuplicateProject}
+              onDeleteProject={handleDeleteProject}
+            />
+          ) : (
+            <div className="bg-white p-8 sm:p-12 rounded-3xl border border-slate-200 text-center space-y-3">
+              <p className="text-base text-slate-700 font-semibold">
+                Project not found or was removed.
+              </p>
+              <button
+                onClick={() => {
+                  window.location.hash = isUrlViewOnly ? 'view-only' : 'all';
+                }}
+                className="inline-flex items-center text-xs font-semibold px-4 py-2 bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 transition-colors cursor-pointer"
+              >
+                Return to All Projects
+              </button>
+            </div>
+          )
+        ) : (
+          <ProjectList
+            projects={projects}
+            holidaysSet={holidaysSet}
+            costPrivacy={effectiveCostPrivacy}
+            isViewOnly={isViewOnly}
+            onSelectProject={(id) => {
+              window.location.hash = isUrlViewOnly ? `p-${id}&view-only` : `p-${id}`;
+            }}
+            onCreateProject={handleCreateProject}
+          />
+        )}
+      </main>
+
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white text-xs sm:text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg border border-slate-700 backdrop-blur-xs flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Holidays Modal */}
+      <HolidayModal
+        isOpen={isHolidayModalOpen}
+        onClose={() => setIsHolidayModalOpen(false)}
+        holidays={holidays}
+        onSaveHolidays={handleSaveHolidays}
+      />
+
+      {/* User Management & Roles Modal (Admin Waranya Only) */}
+      {isUserManagementOpen && currentUser && (
+        <UserManagementModal
+          currentUser={currentUser}
+          onClose={() => setIsUserManagementOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
