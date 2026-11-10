@@ -229,13 +229,13 @@ export default function App() {
   // Projects & Holidays State
   const [projects, setProjects] = useState<Project[]>(() => {
     const cached = GoogleSheetsService.getLocalProjects();
-    if (cached && cached.length > 0) return cached;
+    if (cached) return cached;
     return [createSampleProject()];
   });
 
   const [holidays, setHolidays] = useState<Holiday[]>(() => {
     const cached = GoogleSheetsService.getLocalHolidays();
-    if (cached && cached.length > 0) return cached;
+    if (cached) return cached;
     return DEFAULT_HOLIDAYS;
   });
 
@@ -332,8 +332,10 @@ export default function App() {
         accessToken,
         sheetId
       );
+      const databaseInitialized =
+        await GoogleSheetsService.isDatabaseInitialized(accessToken, sheetId);
 
-      if (remoteProjects.length > 0) {
+      if (databaseInitialized || remoteProjects.length > 0) {
         setProjects(remoteProjects);
       } else {
         // First time initialization: populate remote sheet with current projects
@@ -345,7 +347,7 @@ export default function App() {
         );
       }
 
-      if (remoteHolidays.length > 0) {
+      if (databaseInitialized || remoteHolidays.length > 0) {
         setHolidays(remoteHolidays);
       } else {
         await GoogleSheetsService.saveHolidays(accessToken, sheetId, holidays);
@@ -388,15 +390,15 @@ export default function App() {
           syncState.spreadsheetId!
         );
 
-        if (remoteProjects.length > 0) {
-          setProjects(remoteProjects);
-        }
-        if (remoteHolidays.length > 0) {
-          setHolidays(remoteHolidays);
-        }
+        setProjects(remoteProjects);
+        setHolidays(remoteHolidays);
         setSyncState((prev) => ({ ...prev, lastSyncedAt: new Date() }));
       } catch (e) {
-        // Silent background pull fail
+        console.error('Background Google Sheets sync failed:', e);
+        setSyncState((prev) => ({
+          ...prev,
+          error: e instanceof Error ? e.message : 'Background sync failed',
+        }));
       }
     };
 
@@ -576,13 +578,29 @@ export default function App() {
     );
 
     if (token && syncState.spreadsheetId) {
+      setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
       try {
         await GoogleSheetsService.saveHolidays(
           token,
           syncState.spreadsheetId,
           newHolidays
         );
-      } catch {}
+        setSyncState((prev) => ({
+          ...prev,
+          isSyncing: false,
+          isSynced: true,
+          lastSyncedAt: new Date(),
+        }));
+      } catch (err) {
+        console.error('Failed to save holidays to Google Sheets:', err);
+        setSyncState((prev) => ({
+          ...prev,
+          isSyncing: false,
+          error: err instanceof Error ? err.message : 'Holiday save failed',
+        }));
+        showToast('Holidays saved locally, but Google Sheets sync failed');
+        return;
+      }
     }
     showToast('Holidays updated');
   };

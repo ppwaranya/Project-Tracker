@@ -5,6 +5,8 @@ const SPREADSHEET_TITLE = 'Launch Tracker Database';
 const CACHE_KEY_PROJECTS = 'launch_tracker_projects_cache';
 const CACHE_KEY_HOLIDAYS = 'launch_tracker_holidays_cache';
 const CACHE_KEY_SHEET_ID = 'launch_tracker_sheet_id';
+const CONFIGURED_SPREADSHEET_ID =
+  import.meta.env.VITE_GOOGLE_SHEETS_ID?.trim() || null;
 
 export interface SyncState {
   isSynced: boolean;
@@ -39,10 +41,139 @@ const PROJECT_HEADERS = [
 ];
 
 const HOLIDAY_HEADERS = ['ID', 'Date', 'Name'];
+const META_HEADERS = ['Key', 'Value'];
 
 export class GoogleSheetsService {
   private static cachedSpreadsheetId: string | null =
-    localStorage.getItem(CACHE_KEY_SHEET_ID) || null;
+    CONFIGURED_SPREADSHEET_ID || localStorage.getItem(CACHE_KEY_SHEET_ID) || null;
+
+  private static async throwApiError(
+    response: Response,
+    fallbackMessage: string
+  ): Promise<never> {
+    let message = fallbackMessage;
+    try {
+      const error = await response.json();
+      message = error.error?.message || fallbackMessage;
+    } catch {
+      message = `${fallbackMessage} (HTTP ${response.status})`;
+    }
+    throw new Error(message);
+  }
+
+  private static async ensureSheetStructure(
+    accessToken: string,
+    sheetId: string
+  ): Promise<void> {
+    const metadataRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties(sheetId,title)`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!metadataRes.ok) {
+      await this.throwApiError(metadataRes, 'Failed to read spreadsheet structure');
+    }
+
+    const metadata = await metadataRes.json();
+    const existingTitles = new Set(
+      (metadata.sheets || []).map(
+        (sheet: { properties?: { title?: string } }) => sheet.properties?.title
+      )
+    );
+    const missingTitles = ['Projects', 'Holidays', 'Meta'].filter(
+      (title) => !existingTitles.has(title)
+    );
+    if (missingTitles.length > 0) {
+      const updateRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            requests: missingTitles.map((title) => ({
+              addSheet: {
+                properties: {
+                  title,
+                  gridProperties: { frozenRowCount: 1 },
+                },
+              },
+            })),
+          }),
+        }
+      );
+      if (!updateRes.ok) {
+        await this.throwApiError(updateRes, 'Failed to create spreadsheet tabs');
+      }
+    }
+
+    for (const [range, headers] of [
+      ['Projects!A1:T1', PROJECT_HEADERS],
+      ['Holidays!A1:C1', HOLIDAY_HEADERS],
+      ['Meta!A1:B1', META_HEADERS],
+    ] as const) {
+      const headerRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (!headerRes.ok) {
+        await this.throwApiError(headerRes, 'Failed to read spreadsheet headers');
+      }
+      const headerData = await headerRes.json();
+      if (headerData.values?.length) continue;
+
+      const writeRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=RAW`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ values: [headers] }),
+        }
+      );
+      if (!writeRes.ok) {
+        await this.throwApiError(writeRes, 'Failed to write spreadsheet headers');
+      }
+    }
+  }
+
+  static async isDatabaseInitialized(
+    accessToken: string,
+    sheetId: string
+  ): Promise<boolean> {
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Meta!A2:B2`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!res.ok) {
+      await this.throwApiError(res, 'Failed to read spreadsheet initialization state');
+    }
+    const data = await res.json();
+    return data.values?.[0]?.[0] === 'initialized' && data.values?.[0]?.[1] === 'true';
+  }
+
+  private static async markDatabaseInitialized(
+    accessToken: string,
+    sheetId: string
+  ): Promise<void> {
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Meta!A2:B2?valueInputOption=RAW`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ values: [['initialized', 'true']] }),
+      }
+    );
+    if (!res.ok) {
+      await this.throwApiError(res, 'Failed to save spreadsheet initialization state');
+    }
+  }
 
   static getSpreadsheetId(): string | null {
     return this.cachedSpreadsheetId;
@@ -56,20 +187,41 @@ export class GoogleSheetsService {
 
   // Find existing spreadsheet or create a new one
   static async getOrCreateSpreadsheet(accessToken: string): Promise<string> {
-    if (this.cachedSpreadsheetId) {
-      try {
-        const verifyRes = await fetch(
-          `https://sheets.googleapis.com/v4/spreadsheets/${this.cachedSpreadsheetId}?fields=spreadsheetId,properties.title`,
-          {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          }
+    if (CONFIGURED_SPREADSHEET_ID) {
+      const verifyRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${CONFIGURED_SPREADSHEET_ID}?fields=spreadsheetId,properties.title`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (!verifyRes.ok) {
+        await this.throwApiError(
+          verifyRes,
+          'Failed to access the configured Google spreadsheet'
         );
-        if (verifyRes.ok) {
-          return this.cachedSpreadsheetId;
-        }
-      } catch {
-        // Fall back to searching
       }
+      this.cachedSpreadsheetId = CONFIGURED_SPREADSHEET_ID;
+      await this.ensureSheetStructure(accessToken, CONFIGURED_SPREADSHEET_ID);
+      return CONFIGURED_SPREADSHEET_ID;
+    }
+
+    if (this.cachedSpreadsheetId) {
+      const verifyRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${this.cachedSpreadsheetId}?fields=spreadsheetId,properties.title`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
+      if (verifyRes.ok) {
+        await this.ensureSheetStructure(
+          accessToken,
+          this.cachedSpreadsheetId
+        );
+        return this.cachedSpreadsheetId;
+      }
+      if (verifyRes.status !== 404) {
+        await this.throwApiError(verifyRes, 'Failed to access cached spreadsheet');
+      }
+      this.cachedSpreadsheetId = null;
+      localStorage.removeItem(CACHE_KEY_SHEET_ID);
     }
 
     // Search Google Drive for spreadsheet with title
@@ -88,6 +240,7 @@ export class GoogleSheetsService {
         const sheetId = data.files[0].id;
         this.cachedSpreadsheetId = sheetId;
         localStorage.setItem(CACHE_KEY_SHEET_ID, sheetId);
+        await this.ensureSheetStructure(accessToken, sheetId);
         return sheetId;
       }
     }
@@ -254,7 +407,7 @@ export class GoogleSheetsService {
     );
 
     if (!res.ok) {
-      return [];
+      await this.throwApiError(res, 'Failed to read holidays from Google Sheets');
     }
 
     const data = await res.json();
@@ -312,9 +465,8 @@ export class GoogleSheetsService {
       ];
     });
 
-    // Clear old project values up to row 500 to keep clean
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Projects!A2:T500:clear`,
+    const clearRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Projects!A2:T:clear`,
       {
         method: 'POST',
         headers: {
@@ -323,6 +475,10 @@ export class GoogleSheetsService {
         },
       }
     );
+
+    if (!clearRes.ok) {
+      await this.throwApiError(clearRes, 'Failed to clear old projects from Google Sheets');
+    }
 
     if (rows.length > 0) {
       const updateRes = await fetch(
@@ -345,6 +501,7 @@ export class GoogleSheetsService {
       }
     }
 
+    await this.markDatabaseInitialized(accessToken, sheetId);
     localStorage.setItem(CACHE_KEY_PROJECTS, JSON.stringify(projects));
   }
 
@@ -356,8 +513,8 @@ export class GoogleSheetsService {
   ): Promise<void> {
     const rows = holidays.map((h) => [h.id, h.date, h.name]);
 
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Holidays!A2:C200:clear`,
+    const clearRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Holidays!A2:C:clear`,
       {
         method: 'POST',
         headers: {
@@ -367,8 +524,12 @@ export class GoogleSheetsService {
       }
     );
 
+    if (!clearRes.ok) {
+      await this.throwApiError(clearRes, 'Failed to clear old holidays from Google Sheets');
+    }
+
     if (rows.length > 0) {
-      await fetch(
+      const updateRes = await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Holidays!A2:C${
           rows.length + 1
         }?valueInputOption=USER_ENTERED`,
@@ -381,8 +542,12 @@ export class GoogleSheetsService {
           body: JSON.stringify({ values: rows }),
         }
       );
+      if (!updateRes.ok) {
+        await this.throwApiError(updateRes, 'Failed to write holidays to Google Sheets');
+      }
     }
 
+    await this.markDatabaseInitialized(accessToken, sheetId);
     localStorage.setItem(CACHE_KEY_HOLIDAYS, JSON.stringify(holidays));
   }
 

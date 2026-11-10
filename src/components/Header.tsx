@@ -160,7 +160,10 @@ export const Header: React.FC<HeaderProps> = ({
                     <button
                       onClick={onManualSync}
                       disabled={syncState.isSyncing}
-                      title="Sync with Google Sheets database"
+                      title={
+                        syncState.error ||
+                        'Sync with Google Sheets database'
+                      }
                       className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-emerald-900 hover:bg-emerald-100/70 transition-colors cursor-pointer disabled:opacity-50 font-semibold text-[11px]"
                     >
                       <RefreshCw
