@@ -2034,7 +2034,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </p>
             </div>
 
-            {/* Single clean '+ Add Package' button as requested */}
+            {/* Add Package button */}
             <button
               onClick={() => {
                 const newItem: PackagingItem = {
@@ -2059,7 +2059,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               className="flex items-center gap-1.5 text-xs font-extrabold px-4 py-2 rounded-xl bg-[#ccf835] hover:bg-[#bced28] text-slate-950 transition-colors cursor-pointer shadow-xs"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
-              <span>+ Add Package</span>
+              <span>Add Package</span>
             </button>
           </div>
 
