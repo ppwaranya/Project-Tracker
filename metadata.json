@@ -1,6 +1,6 @@
 {
   "name": "Launch Tracker - Product Project Management",
-  "description": "Comprehensive product launch management system for dietary supplements and skincare, featuring real-time Google Sheets database sync, Google Drive file attachments, Gantt timeline tracking, and presentation cost privacy.",
+  "description": "Comprehensive product launch management system for dietary supplements and skincare, featuring real-time Firebase data sync, Google Drive file attachments, Gantt timeline tracking, and presentation cost privacy.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

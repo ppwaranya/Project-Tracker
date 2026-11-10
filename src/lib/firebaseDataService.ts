@@ -52,7 +52,9 @@ export class FirebaseDataService {
       collection(db, PROJECTS_COLLECTION),
       (snapshot) => {
         const projects = snapshot.docs
-          .map((item) => norm({ ...item.data(), id: item.id }))
+          .map((item) =>
+            norm({ ...item.data(), id: item.id } as Project)
+          )
           .sort((a, b) => b.createdAt - a.createdAt);
         localStorage.setItem(CACHE_KEY_PROJECTS, JSON.stringify(projects));
         onProjects(projects);

@@ -12,7 +12,10 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = getFirestore(
+  app,
+  'ai-studio-launchtrackerpro-3a295d8c-0fdf-4d99-9e85-0dbaf6a3fcad'
+);
 
 const provider = new GoogleAuthProvider();
 // Workspace scopes requested by the user
