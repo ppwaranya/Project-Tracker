@@ -1,10 +1,7 @@
 import {
   collection,
   doc,
-  getDoc,
-  getDocs,
   onSnapshot,
-  runTransaction,
   setDoc,
   writeBatch,
 } from 'firebase/firestore';
@@ -12,12 +9,10 @@ import type { DocumentData } from 'firebase/firestore';
 import { db } from './auth';
 import { Holiday, Project } from './types';
 import { norm } from './trackerLogic';
-import { GoogleSheetsService } from './googleSheetsService';
 
 const PROJECTS_COLLECTION = 'projects';
 const SETTINGS_COLLECTION = 'settings';
 const HOLIDAYS_DOCUMENT = 'holidays';
-const DATABASE_DOCUMENT = 'database';
 const CACHE_KEY_PROJECTS = 'launch_tracker_projects_cache';
 const CACHE_KEY_HOLIDAYS = 'launch_tracker_holidays_cache';
 
@@ -38,7 +33,6 @@ const removeUndefined = <T>(value: T): T => {
 export interface SyncState {
   isSynced: boolean;
   isSyncing: boolean;
-  isInitialized: boolean;
   lastSyncedAt: Date | null;
   error: string | null;
 }
@@ -79,19 +73,6 @@ export class FirebaseDataService {
     );
   }
 
-  static subscribeToDatabaseStatus(
-    onStatus: (isInitialized: boolean) => void,
-    onError: (error: Error) => void
-  ): () => void {
-    return onSnapshot(
-      doc(db, SETTINGS_COLLECTION, DATABASE_DOCUMENT),
-      (snapshot) => {
-        onStatus(snapshot.data()?.initialized === true);
-      },
-      onError
-    );
-  }
-
   static async saveProjectChanges(
     projects: Project[],
     deletedIds: string[]
@@ -123,88 +104,6 @@ export class FirebaseDataService {
       items: holidays,
     });
     localStorage.setItem(CACHE_KEY_HOLIDAYS, JSON.stringify(holidays));
-  }
-
-  static async importInitialData(
-    projects: Project[],
-    holidays: Holiday[]
-  ): Promise<boolean> {
-    const databaseRef = doc(db, SETTINGS_COLLECTION, DATABASE_DOCUMENT);
-    const existingDatabase = await getDoc(databaseRef);
-    if (existingDatabase.data()?.initialized === true) return false;
-
-    const failedImport = existingDatabase.data()?.importFailedAt != null;
-    if (!failedImport) {
-      const existingProjects = await getDocs(collection(db, PROJECTS_COLLECTION));
-      if (existingProjects.size > 0) {
-        throw new Error(
-          'Firebase already contains project data. The Google Sheets import was stopped to avoid overwriting it.'
-        );
-      }
-    }
-
-    const importClaim = await runTransaction(db, async (transaction) => {
-      const databaseSnapshot = await transaction.get(databaseRef);
-      if (databaseSnapshot.data()?.initialized === true) {
-        return { acquired: false, failedImport: false };
-      }
-      if (databaseSnapshot.exists() && databaseSnapshot.data()?.importing === true) {
-        throw new Error('A Google Sheets import is already in progress.');
-      }
-
-      transaction.set(databaseRef, {
-        initialized: false,
-        importing: true,
-        importStartedAt: Date.now(),
-        importFailedAt: null,
-      });
-      return { acquired: true, failedImport };
-    });
-
-    if (!importClaim.acquired) return false;
-
-    try {
-      if (importClaim.failedImport) {
-        const partialProjects = await getDocs(collection(db, PROJECTS_COLLECTION));
-        await this.saveProjectChanges(
-          [],
-          partialProjects.docs.map((project) => project.id)
-        );
-      }
-
-      await this.saveProjectChanges(projects, []);
-      await this.saveHolidays(holidays);
-      await setDoc(databaseRef, {
-        initialized: true,
-        importing: false,
-        importedAt: Date.now(),
-        source: 'google-sheets',
-      });
-      return true;
-    } catch (error) {
-      await setDoc(
-        databaseRef,
-        { initialized: false, importing: false, importFailedAt: Date.now() },
-        { merge: true }
-      );
-      throw error;
-    }
-  }
-
-  static async importFromGoogleSheets(accessToken: string): Promise<boolean> {
-    const spreadsheetId = GoogleSheetsService.getMigrationSpreadsheetId();
-    if (!spreadsheetId) {
-      throw new Error(
-        'Set VITE_GOOGLE_SHEETS_ID to the existing spreadsheet ID before importing.'
-      );
-    }
-
-    const [projects, holidays] = await Promise.all([
-      GoogleSheetsService.loadProjects(accessToken, spreadsheetId),
-      GoogleSheetsService.loadHolidays(accessToken, spreadsheetId),
-    ]);
-
-    return this.importInitialData(projects, holidays);
   }
 
   static getLocalProjects(): Project[] | null {

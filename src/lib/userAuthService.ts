@@ -1,17 +1,49 @@
+import {
+  User,
+  signInWithEmailAndPassword,
+  signInWithCustomToken,
+  signOut,
+} from 'firebase/auth';
 import { AppUser, UserRole } from './types';
+import { auth } from './auth';
+import { FirebaseUserAdminApi, isValidRole } from './firebaseUserAdminApi';
 
 const STORAGE_KEY_USERS = 'launch_tracker_users_db';
 const SESSION_KEY_USER = 'launch_tracker_active_session';
 
-export const DEFAULT_ADMIN: AppUser = {
-  id: 'user_waranyac',
-  username: 'waranyac',
-  password: 'Punpun1141*',
-  role: 'Admin',
-  displayName: 'Waranya (Owner / Admin)',
-  failedAttempts: 0,
-  isLocked: false,
-  createdAt: Date.now(),
+const usernameAuthEmail = (username: string): string => {
+  const normalized = username.trim().toLowerCase();
+  const encoded = Array.from(new TextEncoder().encode(normalized))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+  return `u-${encoded}@project-tracker.firebaseapp.com`;
+};
+
+const appUserFromCredential = async (
+  firebaseUser: Awaited<ReturnType<typeof signInWithEmailAndPassword>>['user']
+): Promise<AppUser> => {
+  const tokenResult = await firebaseUser.getIdTokenResult(true);
+  const { username, role } = tokenResult.claims;
+  if (typeof username !== 'string' || !isValidRole(role)) {
+    await signOut(auth);
+    throw new Error(
+      'This account has no Project Tracker role yet. Ask an Admin to sync accounts.'
+    );
+  }
+  const user: AppUser = {
+    id: firebaseUser.uid,
+    username,
+    role,
+    displayName: firebaseUser.displayName || username,
+    password: '',
+    failedAttempts: 0,
+    isLocked: false,
+    createdAt: firebaseUser.metadata.creationTime
+      ? new Date(firebaseUser.metadata.creationTime).getTime()
+      : Date.now(),
+  };
+  UserAuthService.setCurrentSession(user);
+  return user;
 };
 
 export class UserAuthService {
@@ -19,198 +51,177 @@ export class UserAuthService {
     this.getUsers();
   }
 
-  // Retrieve all users from storage (or seed default admin if empty)
   static getUsers(): AppUser[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEY_USERS);
-      if (!raw) {
-        this.saveUsers([DEFAULT_ADMIN]);
-        return [DEFAULT_ADMIN];
-      }
-      const parsed: AppUser[] = JSON.parse(raw);
-      // Ensure default admin always exists
-      if (!parsed.some((u) => u.username.toLowerCase() === DEFAULT_ADMIN.username.toLowerCase())) {
-        parsed.unshift(DEFAULT_ADMIN);
-        this.saveUsers(parsed);
-      }
-      return parsed;
-    } catch {
-      return [DEFAULT_ADMIN];
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error('Could not read saved account list:', error);
+      return [];
     }
   }
 
   static saveUsers(users: AppUser[]): void {
     try {
-      localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users));
-    } catch {
-      // Storage unavailable or quota exceeded
+      localStorage.setItem(
+        STORAGE_KEY_USERS,
+        JSON.stringify(users.map((user) => ({ ...user, password: '' })))
+      );
+    } catch (error) {
+      console.error('Could not save account list:', error);
     }
   }
 
-  // Get active session from sessionStorage (cleared automatically on tab/window close)
   static getCurrentSession(): AppUser | null {
     try {
       const raw = sessionStorage.getItem(SESSION_KEY_USER);
       if (!raw) return null;
       return JSON.parse(raw);
-    } catch {
+    } catch (error) {
+      console.error('Could not read current account session:', error);
       return null;
     }
   }
 
-  // Set active session in sessionStorage
   static setCurrentSession(user: AppUser | null): void {
     try {
       if (user) {
-        // Exclude plain password from active session memory
-        const safeSession = { ...user, password: '' };
-        sessionStorage.setItem(SESSION_KEY_USER, JSON.stringify(safeSession));
+        sessionStorage.setItem(
+          SESSION_KEY_USER,
+          JSON.stringify({ ...user, password: '' })
+        );
       } else {
         sessionStorage.removeItem(SESSION_KEY_USER);
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      console.error('Could not save current account session:', error);
     }
   }
 
-  // Login attempt with 5-strike lock logic
-  static login(
+  static async login(
     usernameInput: string,
     passwordInput: string
-  ): { success: boolean; user?: AppUser; error?: string; isLocked?: boolean } {
+  ): Promise<{ success: boolean; user?: AppUser; error?: string }> {
     const username = usernameInput.trim();
-    const password = passwordInput.trim();
-
-    if (!username || !password) {
+    if (!username || !passwordInput) {
       return { success: false, error: 'Please enter both username and password.' };
     }
-
-    const users = this.getUsers();
-    const userIndex = users.findIndex(
-      (u) => u.username.toLowerCase() === username.toLowerCase()
-    );
-
-    if (userIndex === -1) {
-      return { success: false, error: 'Invalid username or password.' };
-    }
-
-    const targetUser = users[userIndex];
-
-    // Check if account is locked
-    if (targetUser.isLocked) {
+    try {
+      const credential = await signInWithEmailAndPassword(
+        auth,
+        usernameAuthEmail(username),
+        passwordInput
+      );
+      const user = await appUserFromCredential(credential.user);
+      return { success: true, user };
+    } catch (error) {
+      console.error('Username and password sign-in failed:', error);
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? String(error.code)
+          : '';
       return {
         success: false,
-        isLocked: true,
         error:
-          'This account is locked after 5 failed login attempts. Please contact the system owner (waranyac) to unlock or reset your password.',
+          code === 'auth/operation-not-allowed'
+            ? 'Enable Email/Password in Firebase Authentication before signing in.'
+            : code === 'auth/too-many-requests'
+              ? 'Too many sign-in attempts. Please wait and try again.'
+              : error instanceof Error
+                ? error.message
+                : 'Invalid username or password.',
       };
     }
-
-    // Verify password
-    if (targetUser.password !== password) {
-      targetUser.failedAttempts = (targetUser.failedAttempts || 0) + 1;
-
-      if (targetUser.failedAttempts >= 5) {
-        targetUser.isLocked = true;
-        this.saveUsers(users);
-        return {
-          success: false,
-          isLocked: true,
-          error:
-            'Account locked after 5 failed login attempts. Please contact the system owner (waranyac) to reset your password.',
-        };
-      }
-
-      this.saveUsers(users);
-      const remaining = 5 - targetUser.failedAttempts;
-      return {
-        success: false,
-        error: `Incorrect password. You have ${remaining} attempt${
-          remaining === 1 ? '' : 's'
-        } remaining before account lock.`,
-      };
-    }
-
-    // Login successful: reset failed attempts
-    targetUser.failedAttempts = 0;
-    this.saveUsers(users);
-    this.setCurrentSession(targetUser);
-
-    return { success: true, user: targetUser };
   }
 
-  // Logout (clears session)
-  static logout(): void {
+  static async bootstrapAdmin(
+    username: string,
+    password: string,
+    setupSecret: string
+  ): Promise<AppUser> {
+    const { customToken } = await FirebaseUserAdminApi.bootstrapAdmin(
+      username,
+      password,
+      setupSecret,
+      username
+    );
+    const credential = await signInWithCustomToken(auth, customToken);
+    return appUserFromCredential(credential.user);
+  }
+
+  static async restoreSession(firebaseUser: User): Promise<AppUser> {
+    return appUserFromCredential(firebaseUser);
+  }
+
+  static async logout(): Promise<void> {
     this.setCurrentSession(null);
+    await signOut(auth);
   }
 
-  // Admin: create new user
-  static createUser(
-    newUser: Omit<AppUser, 'id' | 'createdAt' | 'failedAttempts' | 'isLocked'>
-  ): { success: boolean; error?: string; user?: AppUser } {
-    const users = this.getUsers();
-    if (
-      users.some(
-        (u) => u.username.toLowerCase() === newUser.username.trim().toLowerCase()
-      )
-    ) {
-      return { success: false, error: 'Username already exists.' };
-    }
-
-    const created: AppUser = {
-      id: 'usr_' + Math.random().toString(36).slice(2, 9),
-      username: newUser.username.trim(),
-      password: newUser.password.trim(),
-      role: newUser.role,
-      displayName: newUser.displayName.trim() || newUser.username.trim(),
-      failedAttempts: 0,
-      isLocked: false,
-      createdAt: Date.now(),
-    };
-
-    users.push(created);
+  static async listFirebaseUsers(): Promise<AppUser[]> {
+    const { users } = await FirebaseUserAdminApi.listUsers();
     this.saveUsers(users);
-    return { success: true, user: created };
+    return users;
   }
 
-  // Admin: update user (role, password, unlock)
-  static updateUser(
-    userId: string,
-    updates: Partial<Pick<AppUser, 'password' | 'role' | 'displayName' | 'isLocked' | 'failedAttempts'>>
-  ): boolean {
-    const users = this.getUsers();
-    const idx = users.findIndex((u) => u.id === userId);
-    if (idx === -1) return false;
-
-    users[idx] = { ...users[idx], ...updates };
+  static async syncAccounts(): Promise<AppUser[]> {
+    const { users } = await FirebaseUserAdminApi.syncAccounts(this.getUsers());
     this.saveUsers(users);
-
-    // Update active session if currently logged in user was modified
-    const current = this.getCurrentSession();
-    if (current && current.id === userId) {
-      this.setCurrentSession(users[idx]);
-    }
-
-    return true;
+    return users;
   }
 
-  // Admin: delete user
-  static deleteUser(userId: string): boolean {
-    const users = this.getUsers();
-    const target = users.find((u) => u.id === userId);
-    if (!target) return false;
-
-    // Prevent deleting default owner admin
-    if (target.username.toLowerCase() === DEFAULT_ADMIN.username.toLowerCase()) {
-      return false;
-    }
-
-    const filtered = users.filter((u) => u.id !== userId);
-    this.saveUsers(filtered);
-    return true;
+  static async createFirebaseUser(
+    input: Omit<AppUser, 'id' | 'createdAt' | 'failedAttempts' | 'isLocked'>
+  ): Promise<AppUser> {
+    const { user } = await FirebaseUserAdminApi.createUser(input);
+    const users = this.getUsers().filter(
+      (existing) =>
+        existing.username.toLowerCase() !== user.username.toLowerCase()
+    );
+    users.push(user);
+    this.saveUsers(users);
+    return user;
   }
 
-  // Check if current URL indicates View-Only mode
+  static async updateFirebaseUser(
+    user: Pick<AppUser, 'id' | 'username' | 'role' | 'displayName'>
+  ): Promise<AppUser> {
+    const { user: updated } = await FirebaseUserAdminApi.updateUser(user);
+    const users = this.getUsers().map((existing) =>
+      existing.id === updated.id ? updated : existing
+    );
+    this.saveUsers(users);
+    if (auth.currentUser?.uid === updated.id) {
+      this.setCurrentSession(updated);
+      await FirebaseUserAdminApi.refreshClaims();
+    }
+    return updated;
+  }
+
+  static async resetFirebasePassword(
+    id: string,
+    password: string
+  ): Promise<void> {
+    await FirebaseUserAdminApi.resetPassword(id, password);
+  }
+
+  static async setFirebaseUserDisabled(
+    id: string,
+    disabled: boolean
+  ): Promise<void> {
+    await FirebaseUserAdminApi.setDisabled(id, disabled);
+    const users = this.getUsers().map((user) =>
+      user.id === id ? { ...user, isLocked: disabled } : user
+    );
+    this.saveUsers(users);
+  }
+
+  static getFirebaseRole(role: unknown): UserRole | null {
+    return isValidRole(role) ? role : null;
+  }
+
   static isUrlViewOnly(): boolean {
     if (typeof window === 'undefined') return false;
     const hash = window.location.hash || '';

@@ -1,12 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { User } from 'firebase/auth';
 import { AppUser } from '../lib/types';
 import {
   Eye,
   EyeOff,
   RefreshCw,
   Calendar,
-  Sparkles,
   Users,
   LogOut,
   Menu,
@@ -19,14 +17,9 @@ interface HeaderProps {
   onAppLogout: () => void;
   onOpenUserManagement: () => void;
   isViewOnly: boolean;
-  googleUser: User | null;
-  onGoogleLogin: () => void;
-  onGoogleLogout: () => void;
-  isLoggingIn: boolean;
   costPrivacy: boolean;
   onToggleCostPrivacy: () => void;
   syncState: SyncState;
-  onImportSheets: () => void;
   onOpenHolidays: () => void;
 }
 
@@ -35,14 +28,9 @@ export const Header: React.FC<HeaderProps> = ({
   onAppLogout,
   onOpenUserManagement,
   isViewOnly,
-  googleUser,
-  onGoogleLogin,
-  onGoogleLogout,
-  isLoggingIn,
   costPrivacy,
   onToggleCostPrivacy,
   syncState,
-  onImportSheets,
   onOpenHolidays,
 }) => {
   const isAdmin = currentUser?.role === 'Admin';
@@ -215,55 +203,10 @@ export const Header: React.FC<HeaderProps> = ({
                           : 'Firebase'}
                     </div>
 
-                    <button
-                      role="menuitem"
-                      onClick={() => {
-                        onImportSheets();
-                        setIsMenuOpen(false);
-                      }}
-                      disabled={
-                        isLoggingIn ||
-                        syncState.isSyncing ||
-                        syncState.isInitialized
-                      }
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <Sparkles className="h-4 w-4 text-amber-500" />
-                      {syncState.isInitialized
-                        ? 'Sheets Imported'
-                        : 'Import Sheets'}
-                    </button>
                   </>
                 )}
 
                 <div className="my-1 border-t border-slate-100" />
-
-                {googleUser ? (
-                  <button
-                    role="menuitem"
-                    onClick={() => {
-                      onGoogleLogout();
-                      setIsMenuOpen(false);
-                    }}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-emerald-800 hover:bg-emerald-50"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Disconnect Google
-                  </button>
-                ) : (
-                  <button
-                    role="menuitem"
-                    onClick={() => {
-                      onGoogleLogin();
-                      setIsMenuOpen(false);
-                    }}
-                    disabled={isLoggingIn}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                  >
-                    <Sparkles className="h-4 w-4 text-amber-500" />
-                    {isLoggingIn ? 'Connecting...' : 'Connect Google'}
-                  </button>
-                )}
 
                 {currentUser && (
                   <button

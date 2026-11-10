@@ -4,8 +4,6 @@ import { UserAuthService } from '../lib/userAuthService';
 import {
   X,
   UserPlus,
-  Shield,
-  Key,
   Unlock,
   Trash2,
   Check,
@@ -15,12 +13,10 @@ import {
 } from 'lucide-react';
 
 interface UserManagementModalProps {
-  currentUser: AppUser;
   onClose: () => void;
 }
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({
-  currentUser,
   onClose,
 }) => {
   const [users, setUsers] = useState<AppUser[]>(UserAuthService.getUsers());
@@ -31,6 +27,13 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [newRole, setNewRole] = useState<UserRole>('Editor');
   const [formError, setFormError] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isSyncingAccounts, setIsSyncingAccounts] = useState(false);
+  const [hasSyncedAccounts, setHasSyncedAccounts] = useState(() =>
+    UserAuthService.getUsers().some(
+      (user) =>
+        !user.id.startsWith('usr_') && !user.id.startsWith('user_')
+    )
+  );
 
   // Reset password state for existing user
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -40,7 +43,25 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     setUsers(UserAuthService.getUsers());
   };
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleSyncAccounts = async () => {
+    setIsSyncingAccounts(true);
+    setFormError('');
+    try {
+      const syncedUsers = await UserAuthService.syncAccounts();
+      setUsers(syncedUsers);
+      setHasSyncedAccounts(true);
+      setFormError('Accounts were synced to Firebase successfully.');
+    } catch (error) {
+      console.error('Could not sync legacy accounts:', error);
+      setFormError(
+        error instanceof Error ? error.message : 'Account sync failed.'
+      );
+    } finally {
+      setIsSyncingAccounts(false);
+    }
+  };
+
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
 
@@ -48,55 +69,96 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       setFormError('Please provide both username and password.');
       return;
     }
+    if (!hasSyncedAccounts) {
+      setFormError('Sync accounts with Firebase before managing users.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setFormError('Firebase passwords must be at least 6 characters.');
+      return;
+    }
 
-    const res = UserAuthService.createUser({
-      username: newUsername.trim(),
-      password: newPassword.trim(),
-      displayName: newDisplayName.trim() || newUsername.trim(),
-      role: newRole,
-    });
-
-    if (res.success) {
+    try {
+      const user = await UserAuthService.createFirebaseUser({
+        username: newUsername.trim(),
+        password: newPassword,
+        displayName: newDisplayName.trim() || newUsername.trim(),
+        role: newRole,
+      });
+      setUsers((current) => [...current, user]);
       setNewUsername('');
       setNewPassword('');
       setNewDisplayName('');
       setNewRole('Editor');
       setShowAddForm(false);
-      refreshUsers();
-    } else {
-      setFormError(res.error || 'Failed to create user');
+    } catch (error) {
+      console.error('Could not create Firebase account:', error);
+      setFormError(
+        error instanceof Error ? error.message : 'Failed to create user.'
+      );
     }
   };
 
-  const handleUnlockUser = (user: AppUser) => {
-    UserAuthService.updateUser(user.id, {
-      isLocked: false,
-      failedAttempts: 0,
-    });
-    refreshUsers();
-  };
-
-  const handleRoleChange = (userId: string, role: UserRole) => {
-    UserAuthService.updateUser(userId, { role });
-    refreshUsers();
-  };
-
-  const handleResetPassword = (userId: string) => {
-    if (!resetPasswordVal.trim()) return;
-    UserAuthService.updateUser(userId, {
-      password: resetPasswordVal.trim(),
-      isLocked: false,
-      failedAttempts: 0,
-    });
-    setEditingUserId(null);
-    setResetPasswordVal('');
-    refreshUsers();
-  };
-
-  const handleDeleteUser = (userId: string) => {
-    if (confirm('Are you sure you want to delete this user?')) {
-      UserAuthService.deleteUser(userId);
+  const handleUnlockUser = async (user: AppUser) => {
+    try {
+      await UserAuthService.setFirebaseUserDisabled(user.id, false);
       refreshUsers();
+    } catch (error) {
+      console.error('Could not unlock Firebase account:', error);
+      setFormError(error instanceof Error ? error.message : 'Could not unlock account.');
+    }
+  };
+
+  const handleRoleChange = async (user: AppUser, role: UserRole) => {
+    try {
+      const updated = await UserAuthService.updateFirebaseUser({
+        ...user,
+        role,
+      });
+      setUsers((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item))
+      );
+    } catch (error) {
+      console.error('Could not update Firebase account role:', error);
+      setFormError(error instanceof Error ? error.message : 'Could not update role.');
+    }
+  };
+
+  const handleResetPassword = async (userId: string) => {
+    if (resetPasswordVal.length < 6) {
+      setFormError('Firebase passwords must be at least 6 characters.');
+      return;
+    }
+    try {
+      await UserAuthService.resetFirebasePassword(userId, resetPasswordVal);
+      await UserAuthService.setFirebaseUserDisabled(userId, false);
+      setUsers((current) =>
+        current.map((user) =>
+          user.id === userId ? { ...user, isLocked: false } : user
+        )
+      );
+      setEditingUserId(null);
+      setResetPasswordVal('');
+      setFormError('');
+    } catch (error) {
+      console.error('Could not reset Firebase account password:', error);
+      setFormError(
+        error instanceof Error ? error.message : 'Could not reset password.'
+      );
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (confirm('Are you sure you want to delete this user?')) {
+      try {
+        await UserAuthService.setFirebaseUserDisabled(userId, true);
+        refreshUsers();
+      } catch (error) {
+        console.error('Could not disable Firebase account:', error);
+        setFormError(
+          error instanceof Error ? error.message : 'Could not disable account.'
+        );
+      }
     }
   };
 
@@ -158,18 +220,41 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
         {/* Content list */}
         <div className="overflow-y-auto flex-1 space-y-4 pr-1">
           {/* Add User Button & Form */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-bold text-slate-700">
               Active Users ({users.length})
             </span>
-            <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="flex items-center gap-1 text-xs font-extrabold px-3 py-1.5 rounded-xl bg-[#ccf835] hover:bg-[#bced28] text-slate-950 transition-colors cursor-pointer shadow-2xs"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>{showAddForm ? 'Cancel' : 'Add User'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSyncAccounts}
+                disabled={isSyncingAccounts}
+                className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                {isSyncingAccounts ? 'Syncing...' : 'Sync Accounts'}
+              </button>
+              <button
+                onClick={() => setShowAddForm(!showAddForm)}
+                disabled={!hasSyncedAccounts}
+                className="flex items-center gap-1 text-xs font-extrabold px-3 py-1.5 rounded-xl bg-[#ccf835] hover:bg-[#bced28] text-slate-950 transition-colors cursor-pointer shadow-2xs disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>{showAddForm ? 'Cancel' : 'Add User'}</span>
+              </button>
+            </div>
           </div>
+
+          {!hasSyncedAccounts && (
+            <p className="text-xs text-slate-500">
+              Sync accounts once to move existing usernames into Firebase before
+              adding or managing accounts.
+            </p>
+          )}
+
+          {formError && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              {formError}
+            </div>
+          )}
 
           {showAddForm && (
             <form
@@ -203,7 +288,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     Password
                   </label>
                   <input
-                    type="text"
+                    type="password"
                     required
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
@@ -292,7 +377,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                         ) : (
                           <select
                             value={u.role}
-                            onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
+                            disabled={!hasSyncedAccounts}
+                            onChange={(e) =>
+                              handleRoleChange(u, e.target.value as UserRole)
+                            }
                             className="text-xs px-2.5 py-1 rounded-lg border border-slate-200 font-bold bg-white text-slate-700 cursor-pointer"
                           >
                             <option value="Admin">Admin</option>
@@ -306,7 +394,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                         {u.isLocked ? (
                           <div className="flex items-center gap-1 text-rose-700 font-bold bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg w-max text-[11px]">
                             <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-                            <span>Locked (5/5 Failed)</span>
+                            <span>Disabled</span>
                           </div>
                         ) : (
                           <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
@@ -320,6 +408,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           {u.isLocked && (
                             <button
                               onClick={() => handleUnlockUser(u)}
+                              disabled={!hasSyncedAccounts}
                               className="flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-teal-50 text-teal-800 hover:bg-teal-100 transition-colors"
                               title="Unlock account"
                             >
@@ -331,7 +420,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           {isEditingThis ? (
                             <div className="flex items-center gap-1">
                               <input
-                                type="text"
+                                type="password"
                                 value={resetPasswordVal}
                                 onChange={(e) => setResetPasswordVal(e.target.value)}
                                 placeholder="New Pass"
@@ -359,6 +448,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                 setEditingUserId(u.id);
                                 setResetPasswordVal('');
                               }}
+                              disabled={!hasSyncedAccounts}
                               className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer"
                               title="Reset password"
                             >
@@ -369,6 +459,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           {!isDefaultAdmin && (
                             <button
                               onClick={() => handleDeleteUser(u.id)}
+                              disabled={!hasSyncedAccounts}
                               className="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition-colors"
                               title="Delete user"
                             >

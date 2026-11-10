@@ -8,12 +8,7 @@ import {
   uid,
 } from './lib/trackerLogic';
 import { FirebaseDataService, SyncState } from './lib/firebaseDataService';
-import {
-  googleSignIn,
-  initAuth,
-  logout,
-  setAccessToken,
-} from './lib/auth';
+import { initAuth } from './lib/auth';
 import { UserAuthService } from './lib/userAuthService';
 import { Header } from './components/Header';
 import { ProjectList } from './components/ProjectList';
@@ -213,8 +208,6 @@ export default function App() {
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
 
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Cost Privacy Mode (Presentation Mode) - Default loaded from localStorage
   const [costPrivacy, setCostPrivacy] = useState<boolean>(() => {
@@ -238,7 +231,6 @@ export default function App() {
   const [syncState, setSyncState] = useState<SyncState>({
     isSynced: false,
     isSyncing: false,
-    isInitialized: false,
     lastSyncedAt: null,
     error: null,
   });
@@ -278,15 +270,20 @@ export default function App() {
   // Auth initialization
   useEffect(() => {
     const unsubscribe = initAuth(
-      (firebaseUser, accessToken) => {
+      (firebaseUser) => {
         setUser(firebaseUser);
-        if (accessToken) setToken(accessToken);
-        setAccessToken(accessToken);
+        void UserAuthService.restoreSession(firebaseUser)
+          .then(setCurrentUser)
+          .catch((error: unknown) => {
+            console.error('Could not restore Firebase account session:', error);
+            void UserAuthService.logout();
+            setCurrentUser(null);
+          });
       },
       () => {
         setUser(null);
-        setToken(null);
-        setAccessToken(null);
+        UserAuthService.setCurrentSession(null);
+        setCurrentUser(null);
       }
     );
 
@@ -324,16 +321,9 @@ export default function App() {
       },
       handleError
     );
-    const unsubscribeStatus = FirebaseDataService.subscribeToDatabaseStatus(
-      (isInitialized) =>
-        setSyncState((prev) => ({ ...prev, isInitialized })),
-      handleError
-    );
-
     return () => {
       unsubscribeProjects();
       unsubscribeHolidays();
-      unsubscribeStatus();
     };
   }, []);
 
@@ -359,7 +349,7 @@ export default function App() {
 
   const queueSave = (projectsToSave: Project[], deletedIds: string[] = []) => {
     if (!user) {
-      showToast('Sign in with Google to save changes to Firebase');
+      showToast('Sign in with your username and password to save changes');
       return;
     }
 
@@ -420,70 +410,6 @@ export default function App() {
     );
   };
 
-  // Google Login handler
-  const handleLogin = async () => {
-    setIsLoggingIn(true);
-    try {
-      const res = await googleSignIn();
-      if (res) {
-        setUser(res.user);
-        setToken(res.accessToken);
-        setAccessToken(res.accessToken);
-      }
-    } catch (err) {
-      console.error(err);
-      showToast('Google sign-in failed. Firebase changes require a signed-in account.');
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleImportSheets = async () => {
-    if (currentUser?.role !== 'Admin') {
-      showToast('Only an Admin can import the Google Sheets database');
-      return;
-    }
-
-    setIsLoggingIn(true);
-    setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
-    try {
-      const res = await googleSignIn();
-      if (!res) throw new Error('Google sign-in did not return credentials.');
-      setUser(res.user);
-      setToken(res.accessToken);
-      setAccessToken(res.accessToken);
-
-      const imported = await FirebaseDataService.importFromGoogleSheets(
-        res.accessToken
-      );
-      showToast(
-        imported
-          ? 'Google Sheets data imported to Firebase'
-          : 'Firebase is already initialized; no data was imported'
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Google Sheets import failed';
-      console.error('Google Sheets to Firebase import failed:', error);
-      setSyncState((prev) => ({ ...prev, error: message }));
-      showToast(`Could not import Google Sheets: ${message}`);
-    } finally {
-      setSyncState((prev) => ({ ...prev, isSyncing: false }));
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    setUser(null);
-    setToken(null);
-    setSyncState((prev) => ({
-      ...prev,
-      isSynced: false,
-    }));
-    showToast('Signed out of Firebase');
-  };
-
   const isViewOnly = Boolean(isUrlViewOnly || currentUser?.role === 'Viewer');
   const effectiveCostPrivacy = isViewOnly ? true : costPrivacy;
   const canWriteToFirebase = () => {
@@ -491,12 +417,8 @@ export default function App() {
       showToast('Action not allowed in View-Only mode');
       return false;
     }
-    if (!syncState.isInitialized) {
-      showToast('Import the existing Google Sheets data before editing');
-      return false;
-    }
     if (!user) {
-      showToast('Sign in with Google before editing shared Firebase data');
+      showToast('Sign in with your username and password before editing');
       return false;
     }
     return true;
@@ -587,6 +509,13 @@ export default function App() {
   if (!currentUser && !isUrlViewOnly) {
     return (
       <LoginScreen
+        onBootstrapAdmin={async (username, password, setupSecret) => {
+          return UserAuthService.bootstrapAdmin(
+            username,
+            password,
+            setupSecret
+          );
+        }}
         onLoginSuccess={(user) => {
           setCurrentUser(user);
           showToast(`Welcome back, ${user.displayName || user.username}`);
@@ -605,21 +534,17 @@ export default function App() {
     <div className="min-h-screen bg-slate-100/50 flex flex-col font-sans">
       <Header
         currentUser={currentUser}
-        onAppLogout={() => {
-          UserAuthService.logout();
+        onAppLogout={async () => {
+          await UserAuthService.logout();
+          setUser(null);
           setCurrentUser(null);
           showToast('Signed out of Project Tracker');
         }}
         onOpenUserManagement={() => setIsUserManagementOpen(true)}
         isViewOnly={isViewOnly}
-        googleUser={user}
-        onGoogleLogin={handleLogin}
-        onGoogleLogout={handleLogout}
-        isLoggingIn={isLoggingIn}
         costPrivacy={effectiveCostPrivacy}
         onToggleCostPrivacy={handleToggleCostPrivacy}
         syncState={syncState}
-        onImportSheets={handleImportSheets}
         onOpenHolidays={() => setIsHolidayModalOpen(true)}
       />
 
@@ -630,7 +555,7 @@ export default function App() {
               project={currentProject}
               holidaysSet={holidaysSet}
               costPrivacy={effectiveCostPrivacy}
-              accessToken={token}
+              accessToken={null}
               isViewOnly={isViewOnly}
               onBack={() => {
                 window.location.hash = isUrlViewOnly ? 'view-only' : 'all';
@@ -686,7 +611,6 @@ export default function App() {
       {/* User Management & Roles Modal (Admin Waranya Only) */}
       {isUserManagementOpen && currentUser && (
         <UserManagementModal
-          currentUser={currentUser}
           onClose={() => setIsUserManagementOpen(false)}
         />
       )}

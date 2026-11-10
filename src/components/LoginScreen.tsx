@@ -1,40 +1,66 @@
 import React, { useState } from 'react';
 import { UserAuthService } from '../lib/userAuthService';
 import { AppUser } from '../lib/types';
-import { Lock, User, Eye, EyeOff, ShieldAlert, Sparkles, KeyRound } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, ShieldAlert, KeyRound } from 'lucide-react';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: AppUser) => void;
+  onBootstrapAdmin: (
+    username: string,
+    password: string,
+    setupSecret: string
+  ) => Promise<AppUser>;
   onEnterViewOnly: () => void;
   isViewOnlyModeAvailable?: boolean;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
   onLoginSuccess,
+  onBootstrapAdmin,
   onEnterViewOnly,
 }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [setupSecret, setSetupSecret] = useState('');
+  const [isSetupMode, setIsSetupMode] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [isLocked, setIsLocked] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setLoading(true);
 
-    const result = UserAuthService.login(username, password);
-    setLoading(false);
-
-    if (result.success && result.user) {
-      onLoginSuccess(result.user);
-    } else {
-      setErrorMsg(result.error || 'Authentication failed');
-      if (result.isLocked) {
-        setIsLocked(true);
+    try {
+      const result = await UserAuthService.login(username, password);
+      if (result.success && result.user) {
+        onLoginSuccess(result.user);
+      } else {
+        setErrorMsg(result.error || 'Authentication failed');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBootstrap = async () => {
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      const user = await onBootstrapAdmin(
+        username,
+        password,
+        setupSecret
+      );
+      onLoginSuccess(user);
+    } catch (error) {
+      console.error('Initial admin setup failed:', error);
+      setErrorMsg(
+        error instanceof Error ? error.message : 'Initial admin setup failed.'
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -54,7 +80,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             Project Tracker
           </h2>
           <p className="text-xs text-slate-500 font-medium">
-            Sign in with your authorized credentials to continue
+            Sign in with your username and password to continue
           </p>
         </div>
 
@@ -62,16 +88,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         <div className="bg-white rounded-3xl border border-slate-200/90 p-7 sm:p-8 shadow-xs space-y-5">
           {errorMsg && (
             <div
-              className={`p-4 rounded-2xl border text-xs flex items-start gap-3 ${
-                isLocked
-                  ? 'bg-rose-50 border-rose-300 text-rose-900'
-                  : 'bg-amber-50 border-amber-300 text-amber-900'
-              }`}
+              className="p-4 rounded-2xl border text-xs flex items-start gap-3 bg-amber-50 border-amber-300 text-amber-900"
             >
               <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <span className="font-bold block">
-                  {isLocked ? 'Account Locked' : 'Authentication Error'}
+                  Authentication Error
                 </span>
                 <p className="leading-relaxed">{errorMsg}</p>
               </div>
@@ -123,13 +145,60 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
             <button
               type="submit"
-              disabled={loading || isLocked}
+              disabled={loading || isSetupMode}
               className="w-full py-2.5 px-4 rounded-xl text-sm font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center gap-2"
             >
               <KeyRound className="w-4 h-4 text-slate-900" />
               <span>{loading ? 'Verifying...' : 'Sign In'}</span>
             </button>
           </form>
+
+          <div className="border-t border-slate-100 pt-4">
+            {isSetupMode ? (
+              <div className="space-y-3">
+                <p className="text-xs leading-relaxed text-slate-500">
+                  One-time setup: enter your username, a new password, and the
+                  setup code configured in Vercel.
+                </p>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-700">
+                    One-time setup code
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={setupSecret}
+                    onChange={(e) => setSetupSecret(e.target.value)}
+                    autoComplete="off"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-[#ccf835]"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBootstrap}
+                  disabled={
+                    loading ||
+                    !username.trim() ||
+                    password.length < 6 ||
+                    !setupSecret
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {loading ? 'Creating admin...' : 'Set up first Admin account'}
+                </button>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setIsSetupMode((mode) => !mode);
+                setErrorMsg('');
+              }}
+              className="mt-3 w-full text-center text-xs font-semibold text-slate-500 underline hover:text-teal-700"
+            >
+              {isSetupMode ? 'Back to sign in' : 'First-time Admin setup'}
+            </button>
+          </div>
         </div>
 
         {/* View-Only Mode Access Option */}
