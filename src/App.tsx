@@ -15,6 +15,7 @@ import {
   setAccessToken,
 } from './lib/auth';
 import { UserAuthService } from './lib/userAuthService';
+import { FirebaseUserAdminApi } from './lib/firebaseUserAdminApi';
 import { Header } from './components/Header';
 import { ProjectList } from './components/ProjectList';
 import { ProjectDetail } from './components/ProjectDetail';
@@ -438,6 +439,29 @@ export default function App() {
     }
   };
 
+  const handleBootstrapAdmin = async (username: string, password: string) => {
+    const googleAuth = await googleSignIn();
+    if (!googleAuth) {
+      throw new Error('Google sign-in did not return credentials.');
+    }
+    setUser(googleAuth.user);
+    setToken(googleAuth.accessToken);
+    setAccessToken(googleAuth.accessToken);
+
+    await FirebaseUserAdminApi.bootstrapAdmin({
+      username,
+      password,
+      displayName: username,
+    });
+    await FirebaseUserAdminApi.refreshClaims();
+    const result = await UserAuthService.login(username, password);
+    if (!result.success || !result.user) {
+      throw new Error(result.error || 'Could not sign in with the new admin account.');
+    }
+    setCurrentUser(result.user);
+    showToast(`Welcome, ${result.user.displayName || result.user.username}`);
+  };
+
   const handleImportSheets = async () => {
     if (currentUser?.role !== 'Admin') {
       showToast('Only an Admin can import the Google Sheets database');
@@ -587,6 +611,7 @@ export default function App() {
   if (!currentUser && !isUrlViewOnly) {
     return (
       <LoginScreen
+        onBootstrapAdmin={handleBootstrapAdmin}
         onLoginSuccess={(user) => {
           setCurrentUser(user);
           showToast(`Welcome back, ${user.displayName || user.username}`);
@@ -605,8 +630,8 @@ export default function App() {
     <div className="min-h-screen bg-slate-100/50 flex flex-col font-sans">
       <Header
         currentUser={currentUser}
-        onAppLogout={() => {
-          UserAuthService.logout();
+        onAppLogout={async () => {
+          await UserAuthService.logout();
           setCurrentUser(null);
           showToast('Signed out of Project Tracker');
         }}

@@ -5,12 +5,14 @@ import { Lock, User, Eye, EyeOff, ShieldAlert, Sparkles, KeyRound } from 'lucide
 
 interface LoginScreenProps {
   onLoginSuccess: (user: AppUser) => void;
+  onBootstrapAdmin: (username: string, password: string) => Promise<void>;
   onEnterViewOnly: () => void;
   isViewOnlyModeAvailable?: boolean;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
   onLoginSuccess,
+  onBootstrapAdmin,
   onEnterViewOnly,
 }) => {
   const [username, setUsername] = useState('');
@@ -20,21 +22,51 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [isLocked, setIsLocked] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleBootstrapAdmin = async () => {
+    setErrorMsg('');
+    if (!username.trim() || !password) {
+      setErrorMsg('Enter the admin username and a password of at least 6 characters.');
+      return;
+    }
+    if (password.length < 6) {
+      setErrorMsg('The admin password must be at least 6 characters.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await onBootstrapAdmin(username.trim(), password);
+    } catch (error) {
+      console.error('Admin account setup failed:', error);
+      setErrorMsg(
+        error instanceof Error ? error.message : 'Admin account setup failed.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setLoading(true);
 
-    const result = UserAuthService.login(username, password);
-    setLoading(false);
-
-    if (result.success && result.user) {
-      onLoginSuccess(result.user);
-    } else {
-      setErrorMsg(result.error || 'Authentication failed');
-      if (result.isLocked) {
-        setIsLocked(true);
+    try {
+      const result = await UserAuthService.login(username, password);
+      if (result.success && result.user) {
+        onLoginSuccess(result.user);
+      } else {
+        setErrorMsg(result.error || 'Authentication failed');
+        if (result.isLocked) {
+          setIsLocked(true);
+        }
       }
+    } catch (error) {
+      console.error('Username and password sign-in failed:', error);
+      setErrorMsg(
+        'Could not connect to Firebase. Check your connection and try again.'
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -54,7 +86,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             Project Tracker
           </h2>
           <p className="text-xs text-slate-500 font-medium">
-            Sign in with your authorized credentials to continue
+            Sign in with your username and password to continue
           </p>
         </div>
 
@@ -130,6 +162,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               <span>{loading ? 'Verifying...' : 'Sign In'}</span>
             </button>
           </form>
+
+          <div className="border-t border-slate-100 pt-4">
+            <p className="mb-3 text-xs leading-relaxed text-slate-500">
+              First-time setup or recovery: enter the admin username and a new
+              password, then verify with the designated Google account.
+            </p>
+            <button
+              type="button"
+              onClick={handleBootstrapAdmin}
+              disabled={loading}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+            >
+              {loading ? 'Setting up admin...' : 'Set up admin with Google'}
+            </button>
+          </div>
         </div>
 
         {/* View-Only Mode Access Option */}

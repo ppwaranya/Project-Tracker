@@ -248,7 +248,7 @@ export const Header: React.FC<HeaderProps> = ({
                     className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-emerald-800 hover:bg-emerald-50"
                   >
                     <LogOut className="h-4 w-4" />
-                    Disconnect Google
+                    Sign out of Firebase
                   </button>
                 ) : (
                   <button

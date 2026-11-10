@@ -17,6 +17,14 @@ export const db = getFirestore(
   'ai-studio-launchtrackerpro-3a295d8c-0fdf-4d99-9e85-0dbaf6a3fcad'
 );
 
+export const usernameAuthEmail = (username: string): string => {
+  const normalized = username.trim().toLowerCase();
+  const encoded = Array.from(new TextEncoder().encode(normalized))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+  return `u-${encoded}@project-tracker.firebaseapp.com`;
+};
+
 const provider = new GoogleAuthProvider();
 // Workspace scopes requested by the user
 provider.addScope('https://www.googleapis.com/auth/spreadsheets');
