@@ -77,7 +77,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   onDuplicateProject,
   onDeleteProject,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabKey>('overview');
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+    const savedTab = localStorage.getItem(`tab_${savedProject.id}`);
+    return (savedTab as TabKey) || 'overview';
+  });
+
+  const handleTabChange = (newTab: TabKey) => {
+    setActiveTab(newTab);
+    localStorage.setItem(`tab_${savedProject.id}`, newTab);
+  };
+
   const [editingPanel, setEditingPanel] = useState<string | null>(null);
   const [draftProject, setDraftProject] = useState<Project | null>(null);
   const [collapsedPanels, setCollapsedPanels] = useState<Set<string>>(new Set());
@@ -91,12 +100,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [armDelete, setArmDelete] = useState(false);
   const [copiedViewLink, setCopiedViewLink] = useState(false);
 
-  // Link document addition state
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
   const [linkType, setLinkType] = useState<ProjectDocument['type']>('ผลตรวจ / รายงานแล็บ');
 
-  // Multi-line ingredient paste state
   const [ingPasteText, setIngPasteText] = useState('');
   const [showPasteArea, setShowPasteArea] = useState(false);
 
@@ -197,18 +204,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   };
 
   const panelActions = (panelId: string, collapsible = true) => (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
       {!isViewOnly && (editingPanel === panelId ? (
         <>
           {runPanelAction(
             'Save',
             savePanelEdits,
-            'inline-flex h-8 items-center rounded-lg bg-[#ccf835] px-3 text-xs font-extrabold text-slate-950 hover:bg-[#bced28]'
+            'inline-flex h-8 items-center rounded-lg bg-[#ccf835] px-2.5 sm:px-3 text-xs font-extrabold text-slate-950 hover:bg-[#bced28]'
           )}
           {runPanelAction(
             'Cancel',
             cancelPanelEdits,
-            'inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50'
+            'inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-600 hover:bg-slate-50'
           )}
         </>
       ) : (
@@ -223,7 +230,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     </div>
   );
 
-  // Calculations
   const cs = compute(project, holidaysSet);
   const co = costOf(project);
   const s = summ(project, cs, co, holidaysSet);
@@ -242,7 +248,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     );
   };
 
-  // บันทึกข้อมูลและสั่ง sync ทันที
   const updateImmediately = (partial: Partial<Project>) => {
     if (isViewOnly) return;
     const base = draftProject || savedProject;
@@ -258,6 +263,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     onUpdateProject(updated);
   };
 
+  const updateSinglePackage = (pkgId: string, partialPkg: Partial<PackagingItem>) => {
+    if (isViewOnly) return;
+    const basePackages = (draftProject || savedProject).packaging || [];
+    const nextPackaging = basePackages.map((x) =>
+      x.id === pkgId ? { ...x, ...partialPkg } : x
+    );
+    updateImmediately({ packaging: nextPackaging });
+  };
+
   const handleDuplicate = () => {
     onDuplicateProject(project);
   };
@@ -271,7 +285,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     onDeleteProject(project.id);
   };
 
-  // Helper for sub-item step pricing changes
   const updateStep = (
     listType: 'formulas' | 'packaging',
     itemId: string,
@@ -286,15 +299,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         newSteps[stepIdx] = { ...newSteps[stepIdx], [field]: val };
         return { ...f, steps: newSteps };
       });
-      update({ formulas: newFormulas });
+      if (canEdit(`formula-${itemId}`)) {
+        update({ formulas: newFormulas });
+      } else {
+        updateImmediately({ formulas: newFormulas });
+      }
     } else {
-      const newPackaging = project.packaging.map((p) => {
+      const basePackages = (draftProject || savedProject).packaging || [];
+      const newPackaging = basePackages.map((p) => {
         if (p.id !== itemId) return p;
         const newSteps = [...p.steps];
         newSteps[stepIdx] = { ...newSteps[stepIdx], [field]: val };
         return { ...p, steps: newSteps };
       });
-      update({ packaging: newPackaging });
+      updateImmediately({ packaging: newPackaging });
     }
   };
 
@@ -304,13 +322,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         if (f.id !== itemId) return f;
         return { ...f, steps: [...f.steps, { qty: '', price: '' }] };
       });
-      update({ formulas: newFormulas });
+      if (canEdit(`formula-${itemId}`)) {
+        update({ formulas: newFormulas });
+      } else {
+        updateImmediately({ formulas: newFormulas });
+      }
     } else {
-      const newPackaging = project.packaging.map((p) => {
+      const basePackages = (draftProject || savedProject).packaging || [];
+      const newPackaging = basePackages.map((p) => {
         if (p.id !== itemId) return p;
         return { ...p, steps: [...p.steps, { qty: '', price: '' }] };
       });
-      update({ packaging: newPackaging });
+      updateImmediately({ packaging: newPackaging });
     }
   };
 
@@ -328,9 +351,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           steps: newSteps.length ? newSteps : [{ qty: '', price: '' }],
         };
       });
-      update({ formulas: newFormulas });
+      if (canEdit(`formula-${itemId}`)) {
+        update({ formulas: newFormulas });
+      } else {
+        updateImmediately({ formulas: newFormulas });
+      }
     } else {
-      const newPackaging = project.packaging.map((p) => {
+      const basePackages = (draftProject || savedProject).packaging || [];
+      const newPackaging = basePackages.map((p) => {
         if (p.id !== itemId) return p;
         const newSteps = p.steps.filter((_, idx) => idx !== stepIdx);
         return {
@@ -338,7 +366,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           steps: newSteps.length ? newSteps : [{ qty: '', price: '' }],
         };
       });
-      update({ packaging: newPackaging });
+      updateImmediately({ packaging: newPackaging });
     }
   };
 
@@ -446,10 +474,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Header */}
+    <div className="space-y-4 sm:space-y-6">
+      {/* Top Header Card */}
       <div
-        className={`rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden ${
+        className={`rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden ${
           displayCategory(project.category) === 'Dietary Supplement'
             ? 'border-2 border-[#84cc16] bg-gradient-to-b from-[#f7fee7]/70 via-white to-white'
             : 'border-2 border-[#0284c7] bg-gradient-to-b from-[#f0f9ff]/70 via-white to-white'
@@ -491,13 +519,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               }}
               disabled={!canEdit('project-info')}
               placeholder=""
-              className="w-full text-xl sm:text-2xl font-extrabold text-slate-900 border-b border-transparent hover:border-slate-300 focus:border-amber-400 focus:outline-hidden bg-transparent px-1 py-1 rounded-sm resize-none overflow-hidden leading-snug whitespace-normal break-words transition-colors"
+              className="w-full text-lg sm:text-2xl font-extrabold text-slate-900 border-b border-transparent hover:border-slate-300 focus:border-amber-400 focus:outline-hidden bg-transparent px-1 py-1 rounded-sm resize-none overflow-hidden leading-snug whitespace-normal break-words transition-colors"
             />
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap pt-0.5">
+          <div className="flex items-center gap-2 flex-wrap pt-0.5">
             <div className="flex items-center gap-1 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">
-              <span className="text-[11px] font-bold text-slate-500 uppercase">
+              <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase">
                 Lot:
               </span>
               <input
@@ -506,7 +534,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 value={project.lotNo || ''}
                 onChange={(e) => update({ lotNo: e.target.value })}
                 placeholder=""
-                className="w-24 text-xs font-bold text-slate-800 bg-transparent focus:outline-hidden"
+                className="w-20 sm:w-24 text-xs font-bold text-slate-800 bg-transparent focus:outline-hidden"
               />
             </div>
 
@@ -514,7 +542,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               disabled={!canEdit('project-info')}
               value={project.category === 'อาหารเสริม' ? 'Dietary Supplement' : project.category === 'สกินแคร์' ? 'Skincare' : project.category}
               onChange={(e) => update({ category: e.target.value as any })}
-              className="text-xs px-3 py-1.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-700 shadow-2xs cursor-pointer disabled:opacity-70"
+              className="text-xs px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-700 shadow-2xs cursor-pointer disabled:opacity-70"
             >
               <option value="Dietary Supplement">Dietary Supplement</option>
               <option value="Skincare">Skincare</option>
@@ -524,7 +552,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               disabled={!canEdit('project-info')}
               value={project.status === 'กำลังดำเนินการ' ? 'In Progress' : project.status === 'เสร็จสิ้น' ? 'Completed' : project.status === 'พักไว้' ? 'On Hold' : project.status === 'ยกเลิก' ? 'Cancelled' : project.status}
               onChange={(e) => update({ status: e.target.value as any })}
-              className={`text-xs px-3 py-1.5 rounded-xl border font-bold shadow-2xs cursor-pointer disabled:opacity-70 ${
+              className={`text-xs px-2.5 sm:px-3 py-1.5 rounded-xl border font-bold shadow-2xs cursor-pointer disabled:opacity-70 ${
                 project.status === 'เสร็จสิ้น' || project.status === 'Completed'
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                   : project.status === 'กำลังดำเนินการ' || project.status === 'In Progress'
@@ -543,7 +571,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0 self-end md:self-center">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-end">
           {!isViewOnly && panelActions('project-info', false)}
           <button
             onClick={() => {
@@ -561,7 +589,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             ) : (
               <Copy className="w-3.5 h-3.5 text-teal-600" />
             )}
-            <span>{copiedViewLink ? 'Link Copied!' : 'Share View-Only'}</span>
+            <span>{copiedViewLink ? 'Copied!' : 'Share View'}</span>
           </button>
 
           {!isViewOnly && (
@@ -569,93 +597,93 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <button
                 onClick={handleDuplicate}
                 disabled={editingPanel !== null}
-                className="flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer shadow-2xs"
+                className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer shadow-2xs"
               >
                 <Copy className="w-3.5 h-3.5 text-slate-500" />
-                <span>Duplicate</span>
+                <span>Copy</span>
               </button>
 
               <button
                 onClick={handleDelete}
                 disabled={editingPanel !== null}
-                className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl border transition-all cursor-pointer shadow-2xs ${
                   armDelete
                     ? 'bg-rose-600 text-white border-rose-600 animate-pulse'
                     : 'bg-white hover:bg-rose-50 text-rose-600 border-slate-200'
                 }`}
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>{armDelete ? 'Confirm Delete' : 'Delete'}</span>
+                <span>{armDelete ? 'Confirm' : 'Delete'}</span>
               </button>
             </>
           )}
         </div>
       </div>
 
-      {/* KPI Summary Banner */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-[#eee8ff] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#ded5fc] shadow-2xs flex flex-col justify-between">
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4d3b94] block mb-1">
+      {/* KPI Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <div className="bg-[#eee8ff] p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#ded5fc] shadow-2xs flex flex-col justify-between">
+          <span className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-[#4d3b94] block mb-1">
             Current Stage
           </span>
           <div className="flex items-center gap-1.5">
             {s.stage.k > 0 && (
               <span
-                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                className="w-2 sm:w-2.5 h-2 sm:h-2.5 rounded-full flex-shrink-0"
                 style={{
                   backgroundColor: phaseColors[s.stage.k] || '#0d9488',
                 }}
               />
             )}
-            <b className="text-sm sm:text-base font-black text-[#2a1b63] truncate">
+            <b className="text-xs sm:text-base font-black text-[#2a1b63] truncate">
               {s.stage.name}
             </b>
           </div>
-          <span className="text-[11px] text-[#6954b8] mt-1 block truncate font-semibold">
-            {s.currentTaskName ? `Active: ${s.currentTaskName}` : 'Phases 1 to 6'}
+          <span className="text-[10px] sm:text-[11px] text-[#6954b8] mt-1 block truncate font-semibold">
+            {s.currentTaskName ? `${s.currentTaskName}` : 'Phases 1 to 6'}
           </span>
         </div>
 
-        <div className="bg-[#cbf7df] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#b1f1ce] shadow-2xs flex flex-col justify-between">
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0e5c36] block mb-1">
-            Overall Progress
+        <div className="bg-[#cbf7df] p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#b1f1ce] shadow-2xs flex flex-col justify-between">
+          <span className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-[#0e5c36] block mb-1">
+            Progress
           </span>
-          <b className="text-2xl sm:text-3xl font-black text-[#084225]">{s.pct}%</b>
-          <span className="text-[11px] text-[#1b7a48] mt-1 block font-semibold">
-            {s.done} of {s.total} tasks completed
+          <b className="text-xl sm:text-3xl font-black text-[#084225]">{s.pct}%</b>
+          <span className="text-[10px] sm:text-[11px] text-[#1b7a48] mt-1 block font-semibold truncate">
+            {s.done}/{s.total} completed
           </span>
         </div>
 
-        <div className="bg-[#daf0ff] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#c4e5ff] shadow-2xs flex flex-col justify-between">
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#124d91] block mb-1">
-            Est. Arrival Date
+        <div className="bg-[#daf0ff] p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#c4e5ff] shadow-2xs flex flex-col justify-between">
+          <span className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-[#124d91] block mb-1">
+            Est. Arrival
           </span>
-          <b className="text-sm sm:text-base font-black text-[#0f3d73]">
+          <b className="text-xs sm:text-base font-black text-[#0f3d73] truncate">
             {fmt(s.last)}
           </b>
-          <span className="text-[11px] text-[#2467b6] mt-1 block truncate font-semibold">
-            {s.vs || 'Launch target not set'}
+          <span className="text-[10px] sm:text-[11px] text-[#2467b6] mt-1 block truncate font-semibold">
+            {s.vs || 'No launch target'}
           </span>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs flex flex-col justify-between">
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block mb-1">
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+          <span className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block mb-1">
             Total Unit Cost
           </span>
           {costPrivacy ? (
-            <div className="flex items-center gap-1.5 text-slate-600 bg-slate-100 px-2.5 py-1 rounded-xl text-xs font-bold font-mono">
+            <div className="flex items-center gap-1.5 text-slate-600 bg-slate-100 px-2 py-0.5 rounded-lg text-xs font-bold font-mono">
               <EyeOff className="w-3.5 h-3.5" />
-              <span>•••••• (Restricted)</span>
+              <span>••••••</span>
             </div>
           ) : (
             <div>
-              <b className="text-xl sm:text-2xl font-black text-slate-900">
+              <b className="text-base sm:text-2xl font-black text-slate-900 truncate block">
                 {co.unit > 0 ? `${baht(co.unit)} ฿` : '-'}
               </b>
-              <span className="text-[11px] text-slate-400 mt-0.5 block truncate font-medium">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 block truncate font-medium">
                 {co.q
-                  ? `Lot: ${baht(co.batch)} ฿ (${Number(co.q).toLocaleString('en-US')} pcs)`
-                  : 'Enter quantity in Overview'}
+                  ? `Lot: ${baht(co.batch)} ฿`
+                  : 'Enter Qty in Specs'}
               </span>
             </div>
           )}
@@ -664,7 +692,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {/* Tabs Navigation */}
       <div className="border-b border-slate-200/80 overflow-x-auto scrollbar-none pb-1">
-        <nav className="flex space-x-1.5 sm:space-x-2 min-w-max p-1 bg-slate-200/60 rounded-2xl">
+        <nav className="flex space-x-1 sm:space-x-2 min-w-max p-1 bg-slate-200/60 rounded-xl sm:rounded-2xl">
           {[
             { key: 'overview', label: 'Overview' },
             { key: 'formula', label: `Formulation (${project.formulas.length})` },
@@ -676,8 +704,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <button
               key={t.key}
               disabled={editingPanel !== null}
-              onClick={() => setActiveTab(t.key as TabKey)}
-              className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
+              onClick={() => handleTabChange(t.key as TabKey)}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl transition-all cursor-pointer ${
                 activeTab === t.key
                   ? 'bg-[#ccf835] text-slate-950 shadow-xs font-extrabold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
@@ -691,931 +719,336 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
-        <div className="space-y-6">
-          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
+        <div className="space-y-4 sm:space-y-6">
+          <section className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <fieldset disabled={!canEdit('overview-specifications')} className="contents">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2">
-              <h3 className="flex min-w-0 items-center gap-2 text-sm font-bold text-slate-900">
-                <Info className="h-4 w-4 shrink-0 text-teal-600" />
-                <span>Project Specifications & Regulatory Registration</span>
-              </h3>
-              <div className="ml-auto flex shrink-0 items-center gap-2">
-                {panelActions('overview-specifications')}
-              </div>
-            </div>
-
-            <div
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
-              hidden={collapsedPanels.has('overview-specifications')}
-            >
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Project Owner
-                </label>
-                <input
-                  type="text"
-                  value={project.owner}
-                  onChange={(e) => update({ owner: e.target.value })}
-                  placeholder=""
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
-                />
+              <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                <h3 className="flex min-w-0 items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-900 truncate">
+                  <Info className="h-4 w-4 shrink-0 text-teal-600" />
+                  <span className="truncate">Project Specifications & Regulatory Registration</span>
+                </h3>
+                <div className="ml-auto flex shrink-0 items-center gap-2">
+                  {panelActions('overview-specifications')}
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Manufacturing Factory
-                </label>
-                <input
-                  type="text"
-                  value={project.factory}
-                  onChange={(e) => update({ factory: e.target.value })}
-                  placeholder=""
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Lot Number
-                </label>
-                <input
-                  type="text"
-                  value={project.lotNo || ''}
-                  onChange={(e) => update({ lotNo: e.target.value })}
-                  placeholder=""
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 text-emerald-800 flex items-center gap-1">
-                  <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>FDA / License No. (เลขที่ อย. / เลขจดแจ้ง)</span>
-                </label>
-                <input
-                  type="text"
-                  value={project.fdaNo || ''}
-                  onChange={(e) => update({ fdaNo: e.target.value })}
-                  placeholder=""
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-emerald-300 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 bg-emerald-50/30 font-bold text-emerald-950 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Order Quantity (Units)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={project.qty}
-                  onChange={(e) => update({ qty: e.target.value })}
-                  placeholder=""
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Project Start Date
-                </label>
-                <input
-                  type="date"
-                  value={project.startDate}
-                  onChange={(e) => update({ startDate: e.target.value })}
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Target Launch Date
-                </label>
-                <input
-                  type="date"
-                  value={project.launchTarget}
-                  onChange={(e) => update({ launchTarget: e.target.value })}
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Net Volume / Unit Packaging Spec
-                </label>
-                <input
-                  type="text"
-                  value={project.pack}
-                  onChange={(e) => update({ pack: e.target.value })}
-                  placeholder=""
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
-                />
-              </div>
-
-              <div className="col-span-full">
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Packaging & Logistics Notes
-                </label>
-                <textarea
-                  rows={2}
-                  value={project.packNote}
-                  onChange={(e) => update({ packNote: e.target.value })}
-                  placeholder=""
-                  className="w-full text-xs sm:text-sm p-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
-                />
-              </div>
-            </div>
-            </fieldset>
-          </section>
-
-          {/* Section 2: Product Reference & Benchmark */}
-          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-            <fieldset disabled={!canEdit('overview-benchmark')} className="contents">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Award className="w-4 h-4 text-amber-500" />
-                <span>Product Reference & Benchmark</span>
-              </h3>
-              <span className="text-[11px] text-slate-400 font-medium">
-                Benchmark sensory, texture, taste, packaging & pricing against market competitors
-              </span>
-              <div className="ml-auto flex shrink-0 items-center gap-2">
-                {panelActions('overview-benchmark')}
-              </div>
-            </div>
-
-            <div
-              className="grid grid-cols-1 lg:grid-cols-3 gap-5"
-              hidden={collapsedPanels.has('overview-benchmark')}
-            >
-              <div className="space-y-3 lg:col-span-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Reference Product / Brand Name
-                    </label>
-                    <input
-                      type="text"
-                      value={project.benchmark?.name || ''}
-                      onChange={(e) =>
-                        update({
-                          benchmark: {
-                            ...(project.benchmark || { name: '', description: '', images: [] }),
-                            name: e.target.value,
-                          },
-                        })
-                      }
-                      placeholder=""
-                      className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Target / Market Retail Price
-                    </label>
-                    <input
-                      type="text"
-                      value={project.benchmark?.targetPrice || ''}
-                      onChange={(e) =>
-                        update({
-                          benchmark: {
-                            ...(project.benchmark || { name: '', description: '', images: [] }),
-                            targetPrice: e.target.value,
-                          },
-                        })
-                      }
-                      placeholder=""
-                      className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
-                    />
-                  </div>
+              <div
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
+                hidden={collapsedPanels.has('overview-specifications')}
+              >
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Project Owner
+                  </label>
+                  <input
+                    type="text"
+                    value={project.owner}
+                    onChange={(e) => update({ owner: e.target.value })}
+                    placeholder=""
+                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
+                  />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Benchmark Comparison & Winning Factors
+                    Manufacturing Factory
+                  </label>
+                  <input
+                    type="text"
+                    value={project.factory}
+                    onChange={(e) => update({ factory: e.target.value })}
+                    placeholder=""
+                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Lot Number
+                  </label>
+                  <input
+                    type="text"
+                    value={project.lotNo || ''}
+                    onChange={(e) => update({ lotNo: e.target.value })}
+                    placeholder=""
+                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 text-emerald-800 flex items-center gap-1">
+                    <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>FDA / License No.</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={project.fdaNo || ''}
+                    onChange={(e) => update({ fdaNo: e.target.value })}
+                    placeholder=""
+                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-emerald-300 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 bg-emerald-50/30 font-bold text-emerald-950 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Order Quantity (Units)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={project.qty}
+                    onChange={(e) => update({ qty: e.target.value })}
+                    placeholder=""
+                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Project Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={project.startDate}
+                    onChange={(e) => update({ startDate: e.target.value })}
+                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Target Launch Date
+                  </label>
+                  <input
+                    type="date"
+                    value={project.launchTarget}
+                    onChange={(e) => update({ launchTarget: e.target.value })}
+                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Net Volume / Packaging Spec
+                  </label>
+                  <input
+                    type="text"
+                    value={project.pack}
+                    onChange={(e) => update({ pack: e.target.value })}
+                    placeholder=""
+                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
+                  />
+                </div>
+
+                <div className="col-span-full">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Packaging & Logistics Notes
                   </label>
                   <textarea
-                    rows={3}
-                    value={project.benchmark?.description || ''}
-                    onChange={(e) =>
-                      update({
-                        benchmark: {
-                          ...(project.benchmark || { name: '', description: '', images: [] }),
-                          description: e.target.value,
-                        },
-                      })
-                    }
+                    rows={2}
+                    value={project.packNote}
+                    onChange={(e) => update({ packNote: e.target.value })}
                     placeholder=""
-                    className="w-full text-xs sm:text-sm p-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                    className="w-full text-xs sm:text-sm p-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
                   />
                 </div>
               </div>
+            </fieldset>
+          </section>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Benchmark Images ({project.benchmark?.images?.length || 0})
-                  </label>
-                  {!isViewOnly && (
-                    <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Upload Images</span>
+          {/* Section 2: Product Reference & Benchmark */}
+          <section className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-2xs space-y-4">
+            <fieldset disabled={!canEdit('overview-benchmark')} className="contents">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
+                <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Award className="w-4 h-4 text-amber-500" />
+                  <span>Product Reference & Benchmark</span>
+                </h3>
+                <div className="ml-auto flex shrink-0 items-center gap-2">
+                  {panelActions('overview-benchmark')}
+                </div>
+              </div>
+
+              <div
+                className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5"
+                hidden={collapsedPanels.has('overview-benchmark')}
+              >
+                <div className="space-y-3 lg:col-span-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Reference Product / Brand Name
+                      </label>
                       <input
-                        type="file"
-                        multiple
-                        accept="image/png, image/jpeg, image/jpg, image/webp"
-                        onClick={(e) => {
-                          (e.target as HTMLInputElement).value = '';
-                        }}
+                        type="text"
+                        value={project.benchmark?.name || ''}
                         onChange={(e) =>
-                          handleMultipleImageUpload(
-                            e,
-                            project.benchmark?.images || [],
-                            (newImages) =>
-                              updateImmediately({
-                                benchmark: {
-                                  ...(project.benchmark || {
-                                    name: '',
-                                    description: '',
-                                    images: [],
-                                  }),
-                                  images: newImages,
-                                },
-                              })
-                          )
+                          update({
+                            benchmark: {
+                              ...(project.benchmark || { name: '', description: '', images: [] }),
+                              name: e.target.value,
+                            },
+                          })
                         }
-                        className="hidden"
+                        placeholder=""
+                        className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Target / Market Retail Price
+                      </label>
+                      <input
+                        type="text"
+                        value={project.benchmark?.targetPrice || ''}
+                        onChange={(e) =>
+                          update({
+                            benchmark: {
+                              ...(project.benchmark || { name: '', description: '', images: [] }),
+                              targetPrice: e.target.value,
+                            },
+                          })
+                        }
+                        placeholder=""
+                        className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Benchmark Comparison & Winning Factors
                     </label>
-                  )}
+                    <textarea
+                      rows={3}
+                      value={project.benchmark?.description || ''}
+                      onChange={(e) =>
+                        update({
+                          benchmark: {
+                            ...(project.benchmark || { name: '', description: '', images: [] }),
+                            description: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder=""
+                      className="w-full text-xs sm:text-sm p-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                    />
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 p-2.5 rounded-2xl bg-slate-50 border border-slate-200 min-h-[90px]">
-                  {(!project.benchmark?.images || project.benchmark.images.length === 0) ? (
-                    <div className="col-span-3 py-4 text-center text-slate-400 text-xs flex flex-col items-center justify-center">
-                      <ImageIcon className="w-5 h-5 text-slate-300 mb-1" />
-                      <span>No images added yet</span>
-                    </div>
-                  ) : (
-                    project.benchmark.images.map((imgUrl, imgIdx) => (
-                      <div
-                        key={imgIdx}
-                        className="relative rounded-xl overflow-hidden border border-slate-200 bg-white aspect-square flex items-center justify-center group"
-                      >
-                        <img
-                          src={imgUrl}
-                          alt={`Benchmark ${imgIdx + 1}`}
-                          onClick={() =>
-                            setPreviewImage({
-                              src: imgUrl,
-                              alt: `Benchmark ${imgIdx + 1}`,
-                            })
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Images ({project.benchmark?.images?.length || 0})
+                    </label>
+                    {!isViewOnly && (
+                      <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Upload</span>
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/png, image/jpeg, image/jpg, image/webp"
+                          onClick={(e) => {
+                            (e.target as HTMLInputElement).value = '';
+                          }}
+                          onChange={(e) =>
+                            handleMultipleImageUpload(
+                              e,
+                              project.benchmark?.images || [],
+                              (newImages) =>
+                                updateImmediately({
+                                  benchmark: {
+                                    ...(project.benchmark || {
+                                      name: '',
+                                      description: '',
+                                      images: [],
+                                    }),
+                                    images: newImages,
+                                  },
+                                })
+                            )
                           }
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 p-2 rounded-xl bg-slate-50 border border-slate-200 min-h-[80px]">
+                    {(!project.benchmark?.images || project.benchmark.images.length === 0) ? (
+                      <div className="col-span-3 py-3 text-center text-slate-400 text-xs flex flex-col items-center justify-center">
+                        <ImageIcon className="w-4 h-4 text-slate-300 mb-1" />
+                        <span>No images</span>
+                      </div>
+                    ) : (
+                      project.benchmark.images.map((imgUrl, imgIdx) => (
+                        <div
+                          key={imgIdx}
+                          className="relative rounded-lg overflow-hidden border border-slate-200 bg-white aspect-square flex items-center justify-center group"
+                        >
+                          <img
+                            src={imgUrl}
+                            alt={`Benchmark ${imgIdx + 1}`}
+                            onClick={() =>
                               setPreviewImage({
                                 src: imgUrl,
                                 alt: `Benchmark ${imgIdx + 1}`,
-                              });
+                              })
                             }
-                          }}
-                          role="button"
-                          tabIndex={0}
-                          className="h-full w-full cursor-zoom-in object-cover"
-                        />
-                        {!isViewOnly && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updatedImages = (project.benchmark?.images || []).filter(
-                                (_, idx) => idx !== imgIdx
-                              );
-                              updateImmediately({
-                                benchmark: {
-                                  ...(project.benchmark || {
-                                    name: '',
-                                    description: '',
-                                    images: [],
-                                  }),
-                                  images: updatedImages,
-                                },
-                              });
-                            }}
-                            className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                            title="Remove image"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    ))
-                  )}
+                            className="h-full w-full cursor-zoom-in object-cover"
+                          />
+                          {!isViewOnly && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updatedImages = (project.benchmark?.images || []).filter(
+                                  (_, idx) => idx !== imgIdx
+                                );
+                                updateImmediately({
+                                  benchmark: {
+                                    ...(project.benchmark || {
+                                      name: '',
+                                      description: '',
+                                      images: [],
+                                    }),
+                                    images: updatedImages,
+                                  },
+                                });
+                              }}
+                              className="absolute top-1 right-1 p-0.5 rounded-md bg-rose-600 text-white cursor-pointer"
+                              title="Remove"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
             </fieldset>
           </section>
 
           {/* Section 3: USP & Marketing Claims */}
-          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-3">
+          <section className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-2xs space-y-3">
             <fieldset disabled={!canEdit('overview-usp')} className="contents">
-            <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
-              <Sparkles className="h-4 w-4 shrink-0 text-amber-500" />
-              <span className="min-w-0 flex-1">Unique Selling Proposition (USP) & Marketing Claims</span>
-              {panelActions('overview-usp')}
-            </h3>
-            <textarea
-              hidden={collapsedPanels.has('overview-usp')}
-              rows={3}
-              value={project.uspClaims || ''}
-              onChange={(e) => update({ uspClaims: e.target.value })}
-              placeholder=""
-              className="w-full text-xs sm:text-sm p-3.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
-            />
-            </fieldset>
-          </section>
-
-          {/* Section 4: Ingredients List */}
-          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-            <fieldset disabled={!canEdit('overview-ingredients')} className="contents">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">
-                  Ingredients & Active Components ({project.ingredients.length})
-                </h3>
-              </div>
-
-              <div className="ml-auto flex items-center gap-2">
-                <button
-                  onClick={() => setShowPasteArea(!showPasteArea)}
-                  className="text-xs font-bold text-slate-600 hover:text-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  {showPasteArea ? 'Hide Multi-line' : 'Paste Multiple Lines'}
-                </button>
-                <button
-                  onClick={() =>
-                    update({
-                      ingredients: [
-                        ...project.ingredients,
-                        { id: uid(), name: '', amount: '', unit: '', note: '' },
-                      ],
-                    })
-                  }
-                  className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Ingredient</span>
-                </button>
-                {panelActions('overview-ingredients')}
-              </div>
-            </div>
-
-            {showPasteArea && !collapsedPanels.has('overview-ingredients') && (
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                <p className="text-xs text-slate-600 font-medium">
-                  Paste rows (one ingredient per line). Separate name, amount, and notes with commas or tabs:
-                </p>
-                <textarea
-                  rows={3}
-                  value={ingPasteText}
-                  onChange={(e) => setIngPasteText(e.target.value)}
-                  placeholder=""
-                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300 bg-white"
-                />
-                <button
-                  onClick={handlePasteIngredients}
-                  className="px-4 py-1.5 rounded-xl text-xs font-bold bg-teal-600 text-white hover:bg-teal-700 cursor-pointer shadow-xs"
-                >
-                  Import Ingredients
-                </button>
-              </div>
-            )}
-
-            <div
-              className="overflow-x-auto rounded-2xl border border-slate-200"
-              hidden={collapsedPanels.has('overview-ingredients')}
-            >
-              <table className="w-full text-xs text-left">
-                <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
-                  <tr>
-                    <th className="py-2.5 px-3.5">Ingredient Name</th>
-                    <th className="py-2.5 px-3">Concentration / Amount</th>
-                    <th className="py-2.5 px-3">Purpose & Source</th>
-                    <th className="py-2.5 px-2 w-10 text-center"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {project.ingredients.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="py-6 text-center text-slate-400">
-                        No ingredients added yet. Click "+ Add Ingredient" above.
-                      </td>
-                    </tr>
-                  ) : (
-                    project.ingredients.map((it, idx) => (
-                      <tr key={it.id} className="hover:bg-slate-50/70">
-                        <td className="p-2 pl-3.5">
-                          <input
-                            type="text"
-                            value={it.name}
-                            onChange={(e) => {
-                              const copy = [...project.ingredients];
-                              copy[idx].name = e.target.value;
-                              update({ ingredients: copy });
-                            }}
-                            placeholder=""
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <div className="flex gap-1.5">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={splitIngredientAmount(it.amount, it.unit).amount}
-                              onChange={(e) => {
-                                const copy = [...project.ingredients];
-                                const { unit } = splitIngredientAmount(
-                                  copy[idx].amount,
-                                  copy[idx].unit
-                                );
-                                copy[idx] = {
-                                  ...copy[idx],
-                                  amount: e.target.value,
-                                  unit,
-                                };
-                                update({ ingredients: copy });
-                              }}
-                              placeholder=""
-                              aria-label="Amount"
-                              className="w-2/3 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
-                            />
-                            <input
-                              type="text"
-                              value={splitIngredientAmount(it.amount, it.unit).unit}
-                              onChange={(e) => {
-                                const copy = [...project.ingredients];
-                                const { amount } = splitIngredientAmount(
-                                  copy[idx].amount,
-                                  copy[idx].unit
-                                );
-                                copy[idx] = {
-                                  ...copy[idx],
-                                  amount,
-                                  unit: e.target.value,
-                                };
-                                update({ ingredients: copy });
-                              }}
-                              placeholder=""
-                              aria-label="Unit"
-                              className="w-1/3 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
-                            />
-                          </div>
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={it.note}
-                            onChange={(e) => {
-                              const copy = [...project.ingredients];
-                              copy[idx].note = e.target.value;
-                              update({ ingredients: copy });
-                            }}
-                            placeholder=""
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
-                          />
-                        </td>
-                        <td className="p-2 text-center">
-                          <button
-                            onClick={() => {
-                              const copy = project.ingredients.filter(
-                                (x) => x.id !== it.id
-                              );
-                              update({ ingredients: copy });
-                            }}
-                            className="text-slate-400 hover:text-rose-600 p-1"
-                            title="Delete"
-                          >
-                            ×
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            </fieldset>
-          </section>
-
-          {/* Section 5: Laboratory Analysis & QA */}
-          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-            <fieldset disabled={!canEdit('overview-tests')} className="contents">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">
-                  Laboratory Analysis & QA ({project.tests.length})
-                </h3>
-              </div>
-
-              <div className="ml-auto flex shrink-0 items-center gap-2">
-                <button
-                  onClick={() =>
-                    update({
-                      tests: [
-                        ...project.tests,
-                        {
-                          id: uid(),
-                          name: '',
-                          lab: '',
-                          date: '',
-                          status: 'ยังไม่ส่ง',
-                          note: '',
-                        },
-                      ],
-                    })
-                  }
-                  className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Lab Test</span>
-                </button>
-                {panelActions('overview-tests')}
-              </div>
-            </div>
-
-            <div
-              className="overflow-x-auto rounded-2xl border border-slate-200"
-              hidden={collapsedPanels.has('overview-tests')}
-            >
-              <table className="w-full text-xs text-left min-w-[700px]">
-                <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
-                  <tr>
-                    <th className="py-2.5 px-3.5">Test Specification</th>
-                    <th className="py-2.5 px-3">Laboratory / Agency</th>
-                    <th className="py-2.5 px-3">Date Submitted</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3">Report / Notes</th>
-                    <th className="py-2.5 px-2 w-10 text-center"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {project.tests.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-6 text-center text-slate-400">
-                        No lab tests added yet. Use quick templates below.
-                      </td>
-                    </tr>
-                  ) : (
-                    project.tests.map((t, idx) => (
-                      <tr key={t.id} className="hover:bg-slate-50/70">
-                        <td className="p-2 pl-3.5">
-                          <input
-                            type="text"
-                            value={t.name}
-                            onChange={(e) => {
-                              const copy = [...project.tests];
-                              copy[idx].name = e.target.value;
-                              update({ tests: copy });
-                            }}
-                            placeholder=""
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={t.lab}
-                            onChange={(e) => {
-                              const copy = [...project.tests];
-                              copy[idx].lab = e.target.value;
-                              update({ tests: copy });
-                            }}
-                            placeholder=""
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="date"
-                            value={t.date}
-                            onChange={(e) => {
-                              const copy = [...project.tests];
-                              copy[idx].date = e.target.value;
-                              update({ tests: copy });
-                            }}
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <select
-                            value={t.status}
-                            onChange={(e) => {
-                              const copy = [...project.tests];
-                              copy[idx].status = e.target.value as any;
-                              update({ tests: copy });
-                            }}
-                            className={`w-full px-2.5 py-1.5 rounded-lg border font-bold ${
-                              t.status === 'ผ่าน'
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                                : t.status === 'ไม่ผ่าน / ต้องแก้'
-                                ? 'bg-rose-50 text-rose-800 border-rose-300'
-                                : t.status === 'ส่งแล้ว / รอผล'
-                                ? 'bg-blue-50 text-blue-800 border-blue-300'
-                                : 'bg-slate-50 text-slate-700 border-slate-300'
-                            }`}
-                          >
-                            {TEST_STATUS_LIST.map((st) => (
-                              <option key={st} value={st}>
-                                {st}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={t.note}
-                            onChange={(e) => {
-                              const copy = [...project.tests];
-                              copy[idx].note = e.target.value;
-                              update({ tests: copy });
-                            }}
-                            placeholder=""
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
-                          />
-                        </td>
-                        <td className="p-2 text-center">
-                          <button
-                            onClick={() => {
-                              const copy = project.tests.filter((x) => x.id !== t.id);
-                              update({ tests: copy });
-                            }}
-                            className="text-slate-400 hover:text-rose-600 p-1"
-                            title="Delete"
-                          >
-                            ×
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div
-              className="flex items-center gap-1.5 flex-wrap pt-1 text-xs"
-              hidden={collapsedPanels.has('overview-tests')}
-            >
-              <span className="text-slate-500 font-bold">Quick Add:</span>
-              {[
-                'Stability test',
-                'Compatibility test',
-                'Nutrition facts',
-                'Heavy metals',
-                'Microbial test',
-                'Patch test (Irritation)',
-              ].map((name) => (
-                <button
-                  key={name}
-                  onClick={() =>
-                    update({
-                      tests: [
-                        ...project.tests,
-                        {
-                          id: uid(),
-                          name,
-                          lab: '',
-                          date: '',
-                          status: 'ยังไม่ส่ง',
-                          note: '',
-                        },
-                      ],
-                    })
-                  }
-                  className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 transition-colors cursor-pointer"
-                >
-                  + {name}
-                </button>
-              ))}
-            </div>
-            </fieldset>
-          </section>
-
-          {/* Section 6: Regulatory & Permits */}
-          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-            <fieldset disabled={!canEdit('overview-permits')} className="contents">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span>Regulatory, Licenses & Permits ({project.regulatory?.length || 0})</span>
-                </h3>
-              </div>
-
-              <div className="ml-auto flex shrink-0 items-center gap-2">
-                <button
-                  onClick={() =>
-                    update({
-                      regulatory: [
-                        ...(project.regulatory || []),
-                        {
-                          id: uid(),
-                          name: '',
-                          agency: 'Thai FDA',
-                          submissionDate: '',
-                          licenseNo: '',
-                          status: 'รอเตรียมเอกสาร',
-                          note: '',
-                        },
-                      ],
-                    })
-                  }
-                  className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Permit</span>
-                </button>
-                {panelActions('overview-permits')}
-              </div>
-            </div>
-
-            <div
-              className="overflow-x-auto rounded-2xl border border-slate-200"
-              hidden={collapsedPanels.has('overview-permits')}
-            >
-              <table className="w-full text-xs text-left min-w-[760px]">
-                <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
-                  <tr>
-                    <th className="py-2.5 px-3.5">Permit / Application Name</th>
-                    <th className="py-2.5 px-3">Issuing Agency</th>
-                    <th className="py-2.5 px-3">Submission Date</th>
-                    <th className="py-2.5 px-3">Registration / License No.</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3">Notes</th>
-                    <th className="py-2.5 px-2 w-10 text-center"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {(!project.regulatory || project.regulatory.length === 0) ? (
-                    <tr>
-                      <td colSpan={7} className="py-6 text-center text-slate-400">
-                        No regulatory permits registered. Click "+ Add Permit" or choose a quick template below.
-                      </td>
-                    </tr>
-                  ) : (
-                    project.regulatory.map((r, idx) => (
-                      <tr key={r.id} className="hover:bg-slate-50/70">
-                        <td className="p-2 pl-3.5">
-                          <input
-                            type="text"
-                            value={r.name}
-                            onChange={(e) => {
-                              const copy = [...(project.regulatory || [])];
-                              copy[idx].name = e.target.value;
-                              update({ regulatory: copy });
-                            }}
-                            placeholder=""
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={r.agency}
-                            onChange={(e) => {
-                              const copy = [...(project.regulatory || [])];
-                              copy[idx].agency = e.target.value;
-                              update({ regulatory: copy });
-                            }}
-                            placeholder=""
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="date"
-                            value={r.submissionDate}
-                            onChange={(e) => {
-                              const copy = [...(project.regulatory || [])];
-                              copy[idx].submissionDate = e.target.value;
-                              update({ regulatory: copy });
-                            }}
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={r.licenseNo}
-                            onChange={(e) => {
-                              const copy = [...(project.regulatory || [])];
-                              copy[idx].licenseNo = e.target.value;
-                              update({ regulatory: copy });
-                            }}
-                            placeholder=""
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-mono"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <select
-                            value={r.status}
-                            onChange={(e) => {
-                              const copy = [...(project.regulatory || [])];
-                              copy[idx].status = e.target.value as any;
-                              update({ regulatory: copy });
-                            }}
-                            className={`w-full px-2.5 py-1.5 rounded-lg border font-bold ${
-                              r.status === 'อนุมัติแล้ว'
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                                : r.status === 'ต้องแก้ไขเอกสาร'
-                                ? 'bg-rose-50 text-rose-800 border-rose-300'
-                                : r.status === 'ยื่นแล้ว / รอพิจารณา'
-                                ? 'bg-blue-50 text-blue-800 border-blue-300'
-                                : 'bg-slate-50 text-slate-700 border-slate-300'
-                            }`}
-                          >
-                            {REGULATORY_STATUS_LIST.map((st) => (
-                              <option key={st} value={st}>
-                                {st}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={r.note}
-                            onChange={(e) => {
-                              const copy = [...(project.regulatory || [])];
-                              copy[idx].note = e.target.value;
-                              update({ regulatory: copy });
-                            }}
-                            placeholder=""
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
-                          />
-                        </td>
-                        <td className="p-2 text-center">
-                          <button
-                            onClick={() => {
-                              const copy = (project.regulatory || []).filter(
-                                (x) => x.id !== r.id
-                              );
-                              update({ regulatory: copy });
-                            }}
-                            className="text-slate-400 hover:text-rose-600 p-1"
-                            title="Delete"
-                          >
-                            ×
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div
-              className="flex items-center gap-1.5 flex-wrap pt-1 text-xs"
-              hidden={collapsedPanels.has('overview-permits')}
-            >
-              <span className="text-slate-500 font-bold">Quick Add:</span>
-              {[
-                { name: 'อย. อาหารเสริม', agency: 'Thai FDA' },
-                { name: 'จดแจ้งเครื่องสำอาง (อย.)', agency: 'Thai FDA' },
-                { name: 'ใบอนุญาตโฆษณาอาหาร (ฆอ.)', agency: 'Thai FDA' },
-                { name: 'ฮาลาล (Halal Certification)', agency: 'CICOT' },
-                { name: 'หนังสือรับรองเพื่อการส่งออก (CFS)', agency: 'Thai FDA' },
-              ].map((item) => (
-                <button
-                  key={item.name}
-                  onClick={() =>
-                    update({
-                      regulatory: [
-                        ...(project.regulatory || []),
-                        {
-                          id: uid(),
-                          name: item.name,
-                          agency: item.agency,
-                          submissionDate: '',
-                          licenseNo: '',
-                          status: 'รอเตรียมเอกสาร',
-                          note: '',
-                        },
-                      ],
-                    })
-                  }
-                  className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 transition-colors cursor-pointer"
-                >
-                  + {item.name}
-                </button>
-              ))}
-            </div>
+              <h3 className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-900">
+                <Sparkles className="h-4 w-4 shrink-0 text-amber-500" />
+                <span className="min-w-0 flex-1 truncate">Unique Selling Proposition (USP) & Marketing Claims</span>
+                {panelActions('overview-usp')}
+              </h3>
+              <textarea
+                hidden={collapsedPanels.has('overview-usp')}
+                rows={3}
+                value={project.uspClaims || ''}
+                onChange={(e) => update({ uspClaims: e.target.value })}
+                placeholder=""
+                className="w-full text-xs sm:text-sm p-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
+              />
             </fieldset>
           </section>
         </div>
@@ -1623,13 +1056,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {/* TAB 2: FORMULATION */}
       {activeTab === 'formula' && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="space-y-4 sm:space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-base font-bold text-slate-900 font-heading">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 font-heading">
                 Formulation Development & Iterations
               </h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-[11px] sm:text-xs text-slate-500">
                 {project.formulas.length} iterations tracked · Active costing formula:{' '}
                 <strong>
                   {
@@ -1640,8 +1073,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </p>
             </div>
 
-            {/* ปุ่มเพิ่มสูตรใหม่: ปลดล็อกให้กดได้ทันทีโดยไม่ต้องผ่านโหมด Edit */}
-            <div className="ml-auto flex items-center gap-2">
+            <div className="flex items-center gap-2 self-start sm:self-auto">
               {!isViewOnly && (
                 <button
                   type="button"
@@ -1665,115 +1097,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       chosenFormula: newF.id,
                     });
                   }}
-                  className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-4 py-2 rounded-xl transition-colors cursor-pointer shadow-xs"
+                  className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl transition-colors cursor-pointer shadow-xs"
                 >
                   <Plus className="w-4 h-4 stroke-[3]" />
-                  <span>Create New Formula</span>
+                  <span>Create Formula</span>
                 </button>
               )}
             </div>
           </div>
 
-          <section className="bg-white p-4 rounded-2xl border border-slate-200 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-bold text-slate-800">
-                Compare formulas
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={
-                    project.formulas.filter((formula) =>
-                      comparisonFormulaIds.has(formula.id)
-                    ).length < 2
-                  }
-                  onClick={() => setShowFormulaComparison((show) => !show)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold disabled:opacity-40"
-                >
-                  {showFormulaComparison ? 'Hide Comparison' : 'Compare Selected'}
-                </button>
-                {panelToggle('formula-comparison')}
-              </div>
-            </div>
-            <div hidden={collapsedPanels.has('formula-comparison')}>
-              <div className="flex flex-wrap gap-3">
-                {project.formulas.map((formula) => (
-                  <label key={formula.id} className="flex items-center gap-1.5 text-xs">
-                    <input
-                      type="checkbox"
-                      disabled={isViewOnly}
-                      checked={comparisonFormulaIds.has(formula.id)}
-                      onChange={(event) =>
-                        setComparisonFormulaIds((current) => {
-                          const next = new Set(current);
-                          if (event.target.checked) next.add(formula.id);
-                          else next.delete(formula.id);
-                          return next;
-                        })
-                      }
-                      className="accent-teal-600"
-                    />
-                    {formula.ver} {formula.code ? `(${formula.code})` : ''}
-                  </label>
-                ))}
-              </div>
-              {showFormulaComparison &&
-                project.formulas.filter((formula) =>
-                  comparisonFormulaIds.has(formula.id)
-                ).length > 1 && (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full text-xs text-left">
-                    <tbody className="divide-y divide-slate-100">
-                      {[
-                        ['Changes', (formula: Formula) => formula.changes || '-'],
-                        [
-                          'Price tiers',
-                          (formula: Formula) =>
-                            formula.steps
-                              .map((step) => `${step.qty} units: ${baht(Number(step.price) || 0)} THB`)
-                              .join(' · ') || '-',
-                        ],
-                        [
-                          'Ingredients',
-                          (formula: Formula) =>
-                            formula.ingredients?.length
-                              ? formula.ingredients
-                                  .map((ingredient) =>
-                                    `${ingredient.name}: ${ingredient.amount}${ingredient.unit ? ` ${ingredient.unit}` : ''}`
-                                  )
-                                  .join(' · ')
-                              : '-',
-                        ],
-                        ['Notes', (formula: Formula) => formula.note || '-'],
-                      ].map(([label, getter]) => {
-                        const selected = project.formulas.filter((formula) =>
-                          comparisonFormulaIds.has(formula.id)
-                        );
-                        const getValue = getter as (formula: Formula) => string;
-                        const values = selected.map(getValue);
-                        const differs = new Set(values).size > 1;
-                        return (
-                          <tr key={label as string}>
-                            <th className="p-2 bg-slate-50 whitespace-nowrap">{label as string}</th>
-                            {selected.map((formula, index) => (
-                              <td
-                                key={formula.id}
-                                className={`p-2 min-w-48 align-top ${differs ? 'bg-amber-50/70' : ''}`}
-                              >
-                                <strong>{formula.ver}</strong>: {values[index]}
-                              </td>
-                            ))}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <div className="space-y-5">
+          <div className="space-y-4">
             {project.formulas
               .slice()
               .reverse()
@@ -1781,29 +1114,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 const isChosen = f.id === project.chosenFormula;
                 const formulaPriceRes = lookup(f.steps, Number(project.qty) || 0);
 
-                const originalIndex = project.formulas.findIndex((x) => x.id === f.id);
-                let deltaText = '';
-                if (originalIndex > 0) {
-                  const prevFormula = project.formulas[originalIndex - 1];
-                  const prevPriceRes = lookup(
-                    prevFormula.steps,
-                    Number(project.qty) || 0
-                  );
-                  if (formulaPriceRes.has && prevPriceRes.has) {
-                    const diff =
-                      formulaPriceRes.price * (f.vatIncluded ? 1 : 1 + VAT_RATE) -
-                      prevPriceRes.price *
-                        (prevFormula.vatIncluded ? 1 : 1 + VAT_RATE);
-                    if (diff === 0) deltaText = 'Same as previous';
-                    else if (diff > 0) deltaText = `▲ +${baht(diff)} ฿`;
-                    else deltaText = `▼ -${baht(Math.abs(diff))} ฿`;
-                  }
-                }
-
                 return (
                   <div
                     key={f.id}
-                    className={`p-6 rounded-3xl border transition-all ${
+                    className={`p-4 sm:p-6 rounded-2xl sm:rounded-3xl border transition-all ${
                       f.isConfirmed
                         ? 'bg-white border-teal-500 ring-2 ring-teal-500/20 shadow-sm'
                         : isChosen
@@ -1811,648 +1125,124 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         : 'bg-white border-slate-200'
                     }`}
                   >
-                    <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-                      <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                        <input
-                          type="checkbox"
-                          disabled={isViewOnly}
-                          checked={comparisonFormulaIds.has(f.id)}
-                          onChange={(event) =>
-                            setComparisonFormulaIds((current) => {
-                              const next = new Set(current);
-                              if (event.target.checked) next.add(f.id);
-                              else next.delete(f.id);
-                              return next;
-                            })
-                          }
-                        />
-                        Compare
-                      </label>
-                      <strong className="flex-1 text-xs">{f.ver} {f.code || ''}</strong>
-                      {panelActions(`formula-${f.id}`)}
-                    </div>
-                    <div hidden={collapsedPanels.has(`formula-${f.id}`)}>
-                    <fieldset disabled={!canEdit(`formula-${f.id}`)} className="contents">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <input
-                          type="text"
-                          value={f.ver}
-                          onChange={(e) => {
-                            const newFs = project.formulas.map((x) =>
-                              x.id === f.id ? { ...x, ver: e.target.value } : x
-                            );
-                            update({ formulas: newFs });
-                          }}
-                          className="w-16 font-extrabold text-slate-900 px-2 py-1 rounded-xl border border-slate-200 bg-slate-50 text-sm text-center"
-                        />
-
-                        <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">
-                          <span className="text-[11px] font-bold text-slate-400">
-                            Code:
-                          </span>
-                          <input
-                            type="text"
-                            value={f.code || ''}
-                            onChange={(e) => {
-                              const newFs = project.formulas.map((x) =>
-                                x.id === f.id ? { ...x, code: e.target.value } : x
-                              );
-                              update({ formulas: newFs });
-                            }}
-                            placeholder=""
-                            className="w-28 text-xs font-bold text-slate-800 bg-transparent focus:outline-hidden"
-                          />
-                        </div>
-
-                        <input
-                          type="date"
-                          value={f.date}
-                          onChange={(e) => {
-                            const newFs = project.formulas.map((x) =>
-                              x.id === f.id ? { ...x, date: e.target.value } : x
-                            );
-                            update({ formulas: newFs });
-                          }}
-                          className="text-xs px-2.5 py-1 rounded-xl border border-slate-200 bg-white"
-                        />
-
-                        <div className="flex items-center gap-2 pl-2">
-                          {costPrivacy ? (
-                            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md font-mono">
-                              ••••••
-                            </span>
-                          ) : (
-                            <>
-                              <span className="font-extrabold text-slate-800 text-sm">
-                                {formulaPriceRes.has
-                                  ? `${baht(formulaPriceRes.price * (f.vatIncluded ? 1 : 1 + VAT_RATE))} ฿ / pc`
-                                  : 'Price not set'}
-                              </span>
-                              {deltaText && (
-                                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-                                  {deltaText}
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </div>
+                    <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                      <strong className="text-xs sm:text-sm font-extrabold text-slate-800">
+                        {f.ver} {f.code ? `(${f.code})` : ''}
+                      </strong>
+                      <div className="flex items-center gap-2">
+                        {panelActions(`formula-${f.id}`)}
                       </div>
+                    </div>
 
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {!isViewOnly && (
-                          <button
-                            type="button"
-                            onClick={() => handleIterateFromFormula(f)}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-[#ccf835]/35 hover:bg-[#ccf835]/65 text-slate-950 border border-[#b2e61e] transition-colors cursor-pointer"
-                            title="Create new version based on this formula"
-                          >
-                            <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                            <span>New Version</span>
-                          </button>
-                        )}
+                    <div hidden={collapsedPanels.has(`formula-${f.id}`)} className="pt-3 space-y-4">
+                      <fieldset disabled={!canEdit(`formula-${f.id}`)} className="contents">
+                        {/* Control actions for single formula */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <input
+                              type="text"
+                              value={f.ver}
+                              onChange={(e) => {
+                                const newFs = project.formulas.map((x) =>
+                                  x.id === f.id ? { ...x, ver: e.target.value } : x
+                                );
+                                update({ formulas: newFs });
+                              }}
+                              className="w-14 sm:w-16 font-extrabold text-slate-900 px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-xs sm:text-sm text-center"
+                            />
 
-                        <button
-                          type="button"
-                          disabled={isViewOnly}
-                          onClick={() => {
-                            const newFs = project.formulas.map((x) =>
-                              x.id === f.id
-                                ? { ...x, isConfirmed: !x.isConfirmed }
-                                : x
-                            );
-                            update({ formulas: newFs });
-                          }}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                            f.isConfirmed
-                              ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
-                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                          }`}
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Confirm Formulation</span>
-                        </button>
-
-                        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer">
-                          <input
-                            type="radio"
-                            disabled={isViewOnly}
-                            name="chosenFormula"
-                            checked={isChosen}
-                            onChange={() => update({ chosenFormula: f.id })}
-                            className="accent-amber-500"
-                          />
-                          <span>Use for Costing</span>
-                        </label>
-
-                        {!isViewOnly && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm(`Are you sure you want to delete formula iteration ${f.ver}?`)) {
-                                if (project.formulas.length > 1) {
-                                  const newFs = project.formulas.filter(
-                                    (x) => x.id !== f.id
+                            <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-lg border border-slate-200">
+                              <span className="text-[10px] font-bold text-slate-400">Code:</span>
+                              <input
+                                type="text"
+                                value={f.code || ''}
+                                onChange={(e) => {
+                                  const newFs = project.formulas.map((x) =>
+                                    x.id === f.id ? { ...x, code: e.target.value } : x
                                   );
-                                  let newChosen = project.chosenFormula;
-                                  if (newChosen === f.id) {
-                                    newChosen = newFs[newFs.length - 1].id;
-                                  }
-                                  updateImmediately({
-                                    formulas: newFs,
-                                    chosenFormula: newChosen,
-                                  });
-                                } else {
-                                  const resetF: Formula = {
-                                    id: uid(),
-                                    ver: 'V1',
-                                    code: '',
-                                    date: todayISO(),
-                                    changes: '',
-                                    steps: [{ qty: '', price: '' }],
-                                    note: '',
-                                    ingredients: [],
-                                    images: [],
-                                    imageNote: '',
-                                    isConfirmed: false,
-                                    vatIncluded: false,
-                                  };
-                                  updateImmediately({ formulas: [resetF], chosenFormula: resetF.id });
-                                }
-                              }
-                            }}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-300 transition-colors cursor-pointer"
-                            title="Delete this formula iteration"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Delete Formula</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                                  update({ formulas: newFs });
+                                }}
+                                className="w-20 sm:w-24 text-xs font-bold text-slate-800 bg-transparent focus:outline-hidden"
+                              />
+                            </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 pt-4">
-                      <div className="space-y-4 lg:col-span-2">
+                            <input
+                              type="date"
+                              value={f.date}
+                              onChange={(e) => {
+                                const newFs = project.formulas.map((x) =>
+                                  x.id === f.id ? { ...x, date: e.target.value } : x
+                                );
+                                update({ formulas: newFs });
+                              }}
+                              className="text-xs px-2 py-1 rounded-lg border border-slate-200 bg-white"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap justify-end">
+                            {!isViewOnly && (
+                              <button
+                                type="button"
+                                onClick={() => handleIterateFromFormula(f)}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-extrabold bg-[#ccf835]/30 hover:bg-[#ccf835]/60 text-slate-950 border border-[#b2e61e] cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3 stroke-[3]" />
+                                <span>Version</span>
+                              </button>
+                            )}
+
+                            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                              <input
+                                type="radio"
+                                disabled={isViewOnly}
+                                name="chosenFormula"
+                                checked={isChosen}
+                                onChange={() => update({ chosenFormula: f.id })}
+                                className="accent-amber-500"
+                              />
+                              <span>Use Costing</span>
+                            </label>
+
+                            {!isViewOnly && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (confirm(`Delete formula iteration ${f.ver}?`)) {
+                                    const newFs = project.formulas.filter((x) => x.id !== f.id);
+                                    let newChosen = project.chosenFormula;
+                                    if (newChosen === f.id && newFs.length > 0) {
+                                      newChosen = newFs[newFs.length - 1].id;
+                                    }
+                                    updateImmediately({ formulas: newFs, chosenFormula: newChosen });
+                                  }
+                                }}
+                                className="p-1 rounded-lg text-rose-600 hover:bg-rose-50 border border-slate-200 cursor-pointer"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Changes note */}
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-1">
                             Changes & Formulation Notes
                           </label>
                           <textarea
-                            rows={3}
+                            rows={2}
                             value={f.changes}
                             onChange={(e) => {
                               const newFs = project.formulas.map((x) =>
-                                x.id === f.id
-                                  ? { ...x, changes: e.target.value }
-                                  : x
+                                x.id === f.id ? { ...x, changes: e.target.value } : x
                               );
                               update({ formulas: newFs });
                             }}
-                            placeholder=""
-                            className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
+                            className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
                           />
                         </div>
-
-                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                              <ImageIcon className="w-4 h-4 text-slate-500" />
-                              <span>Sample & Physical Appearance Images ({f.images?.length || 0})</span>
-                            </span>
-                            {!isViewOnly && (
-                              <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>Upload Images</span>
-                                <input
-                                  type="file"
-                                  multiple
-                                  accept="image/png, image/jpeg, image/jpg, image/webp"
-                                  onClick={(e) => {
-                                    (e.target as HTMLInputElement).value = '';
-                                  }}
-                                  onChange={(e) =>
-                                    handleMultipleImageUpload(
-                                      e,
-                                      f.images || [],
-                                      (newImgs) => {
-                                        const newFs = project.formulas.map((x) =>
-                                          x.id === f.id ? { ...x, images: newImgs } : x
-                                        );
-                                        updateImmediately({ formulas: newFs });
-                                      }
-                                    )
-                                  }
-                                  className="hidden"
-                                />
-                              </label>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                            {(!f.images || f.images.length === 0) ? (
-                              <div className="col-span-full py-4 text-center text-slate-400 text-xs">
-                                No sample images attached. Click "Upload Images" to attach multiple photos of powder, solution, or texture.
-                              </div>
-                            ) : (
-                              f.images.map((imgUrl, imgIdx) => (
-                                <div
-                                  key={imgIdx}
-                                  className="relative rounded-xl overflow-hidden border border-slate-200 bg-white aspect-square flex items-center justify-center group"
-                                >
-                                  <img
-                                    src={imgUrl}
-                                    alt={`Sample ${imgIdx + 1}`}
-                                    onClick={() =>
-                                      setPreviewImage({
-                                        src: imgUrl,
-                                        alt: `Sample ${imgIdx + 1}`,
-                                      })
-                                    }
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'Enter' || event.key === ' ') {
-                                        event.preventDefault();
-                                        setPreviewImage({
-                                          src: imgUrl,
-                                          alt: `Sample ${imgIdx + 1}`,
-                                        });
-                                      }
-                                    }}
-                                    role="button"
-                                    tabIndex={0}
-                                    className="h-full w-full cursor-zoom-in object-cover"
-                                  />
-                                  {!isViewOnly && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const newImgs = (f.images || []).filter(
-                                          (_, idx) => idx !== imgIdx
-                                        );
-                                        const newFs = project.formulas.map((x) =>
-                                          x.id === f.id ? { ...x, images: newImgs } : x
-                                        );
-                                        updateImmediately({ formulas: newFs });
-                                      }}
-                                      className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </div>
-                              ))
-                            )}
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1">
-                              Image Observations / Sensory Notes
-                            </label>
-                            <input
-                              type="text"
-                              value={f.imageNote || ''}
-                              onChange={(e) => {
-                                const newFs = project.formulas.map((x) =>
-                                  x.id === f.id ? { ...x, imageNote: e.target.value } : x
-                                );
-                                update({ formulas: newFs });
-                              }}
-                              placeholder=""
-                              className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="bg-slate-50/90 p-4 rounded-2xl border border-slate-200 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-slate-800">
-                            Tiered Pricing (ราคาขั้นบันได)
-                          </span>
-                          <label className="text-[11px] text-slate-600 flex items-center gap-1">
-                            Per order qty · VAT
-                            <select
-                              value={f.vatIncluded ? 'included' : 'excluded'}
-                              onChange={(event) => {
-                                const newFs = project.formulas.map((formula) =>
-                                  formula.id === f.id
-                                    ? { ...formula, vatIncluded: event.target.value === 'included' }
-                                    : formula
-                                );
-                                update({ formulas: newFs });
-                              }}
-                              className="px-2 py-1 rounded-lg border border-slate-200 bg-white"
-                            >
-                              <option value="excluded">Not included</option>
-                              <option value="included">Included</option>
-                            </select>
-                          </label>
-                        </div>
-
-                        {costPrivacy ? (
-                          <div className="py-8 text-center text-xs text-slate-400 bg-white rounded-xl border border-slate-200 font-mono">
-                            •••••• Pricing Tiers Hidden
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <table className="w-full text-xs text-left">
-                              <thead>
-                                <tr className="text-slate-500 font-bold border-b border-slate-200 text-[11px]">
-                                  <th className="py-1">From (Units)</th>
-                                  <th className="py-1">Price (THB/pc)</th>
-                                  <th className="py-1 w-8"></th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {f.steps.map((st, sidx) => (
-                                  <tr key={sidx}>
-                                    <td className="py-1 pr-1">
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        value={st.qty}
-                                        onChange={(e) =>
-                                          updateStep(
-                                            'formulas',
-                                            f.id,
-                                            sidx,
-                                            'qty',
-                                            e.target.value
-                                          )
-                                        }
-                                        placeholder=""
-                                        className="w-full px-2.5 py-1 rounded-lg border border-slate-200 bg-white font-medium"
-                                      />
-                                    </td>
-                                    <td className="py-1 pr-1">
-                                      <input
-                                        type="number"
-                                        step="any"
-                                        min="0"
-                                        value={st.price}
-                                        onChange={(e) =>
-                                          updateStep(
-                                            'formulas',
-                                            f.id,
-                                            sidx,
-                                            'price',
-                                            e.target.value
-                                          )
-                                        }
-                                        placeholder=""
-                                        className="w-full px-2.5 py-1 rounded-lg border border-slate-200 bg-white font-medium"
-                                      />
-                                    </td>
-                                    <td className="py-1 text-center">
-                                      <button
-                                        onClick={() =>
-                                          deleteStep('formulas', f.id, sidx)
-                                        }
-                                        className="text-slate-400 hover:text-rose-600 text-sm"
-                                        title="Delete step"
-                                      >
-                                        ×
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-
-                            <button
-                              onClick={() => addStep('formulas', f.id)}
-                              className="text-xs text-teal-700 hover:underline font-bold cursor-pointer pt-1"
-                            >
-                              + Add Price Tier
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-100 space-y-2.5">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-amber-500" />
-                          <span className="text-xs font-bold text-slate-800">
-                            Formula Ingredients & Active Ratio ({f.ingredients?.length || 0})
-                          </span>
-                        </div>
-                        {!isViewOnly && (
-                          <div className="flex items-center gap-2">
-                            {project.ingredients.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const imported = project.ingredients.map((ing) => ({
-                                    id: uid(),
-                                    name: ing.name,
-                                    ...splitIngredientAmount(ing.amount, ing.unit),
-                                    note: ing.note,
-                                  }));
-                                  const newFs = project.formulas.map((x) =>
-                                    x.id === f.id
-                                      ? {
-                                          ...x,
-                                          ingredients: [
-                                            ...(x.ingredients || []),
-                                            ...imported,
-                                          ],
-                                        }
-                                      : x
-                                  );
-                                  update({ formulas: newFs });
-                                }}
-                                className="text-[11px] font-semibold text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg border border-teal-200 transition-colors cursor-pointer"
-                              >
-                                Copy from Project Overview
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newIng = {
-                                  id: uid(),
-                                  name: '',
-                                  amount: '',
-                                  unit: '',
-                                  note: '',
-                                };
-                                const newFs = project.formulas.map((x) =>
-                                  x.id === f.id
-                                    ? {
-                                        ...x,
-                                        ingredients: [
-                                          ...(x.ingredients || []),
-                                          newIng,
-                                        ],
-                                      }
-                                    : x
-                                );
-                                update({ formulas: newFs });
-                              }}
-                              className="flex items-center gap-1 text-[11px] font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-2.5 py-1 rounded-lg transition-colors cursor-pointer shadow-2xs"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Add Ingredient</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50/50">
-                        <table className="w-full text-xs text-left">
-                          <thead>
-                            <tr className="bg-slate-100/80 text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-                              <th className="py-2 px-3">Active / Component</th>
-                              <th className="py-2 px-3 w-52">Amount / Unit</th>
-                              <th className="py-2 px-3">Function / Notes</th>
-                              {!isViewOnly && (
-                                <th className="py-2 px-2 w-8 text-center"></th>
-                              )}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {(!f.ingredients || f.ingredients.length === 0) ? (
-                              <tr>
-                                <td
-                                  colSpan={isViewOnly ? 3 : 4}
-                                  className="py-4 text-center text-slate-400 text-xs"
-                                >
-                                  No specific ingredient breakdown recorded for this formula iteration.
-                                </td>
-                              </tr>
-                            ) : (
-                              f.ingredients.map((ing, ingIdx) => (
-                                <tr
-                                  key={ing.id}
-                                  className="hover:bg-white/80 transition-colors"
-                                >
-                                  <td className="p-1.5 pl-3">
-                                    <input
-                                      type="text"
-                                      disabled={isViewOnly}
-                                      value={ing.name}
-                                      onChange={(e) => {
-                                        const newFs = project.formulas.map((x) => {
-                                          if (x.id !== f.id) return x;
-                                          const copy = [...(x.ingredients || [])];
-                                          copy[ingIdx] = {
-                                            ...copy[ingIdx],
-                                            name: e.target.value,
-                                          };
-                                          return { ...x, ingredients: copy };
-                                        });
-                                        update({ formulas: newFs });
-                                      }}
-                                      placeholder=""
-                                      className="w-full px-2 py-1 rounded-lg border border-slate-200 bg-white font-medium text-xs"
-                                    />
-                                  </td>
-                                  <td className="p-1.5">
-                                    <div className="flex gap-1">
-                                      <input
-                                        type="text"
-                                        inputMode="decimal"
-                                        disabled={isViewOnly}
-                                        value={splitIngredientAmount(ing.amount, ing.unit).amount}
-                                        onChange={(e) => {
-                                          const newFs = project.formulas.map((x) => {
-                                            if (x.id !== f.id) return x;
-                                            const copy = [...(x.ingredients || [])];
-                                            const { unit } = splitIngredientAmount(
-                                              copy[ingIdx].amount,
-                                              copy[ingIdx].unit
-                                            );
-                                            copy[ingIdx] = {
-                                              ...copy[ingIdx],
-                                              amount: e.target.value,
-                                              unit,
-                                            };
-                                            return { ...x, ingredients: copy };
-                                          });
-                                          update({ formulas: newFs });
-                                        }}
-                                        placeholder=""
-                                        aria-label="Amount"
-                                        className="w-2/3 min-w-0 px-2 py-1 rounded-lg border border-slate-200 bg-white font-medium text-xs"
-                                      />
-                                      <input
-                                        type="text"
-                                        disabled={isViewOnly}
-                                        value={splitIngredientAmount(ing.amount, ing.unit).unit}
-                                        onChange={(e) => {
-                                          const newFs = project.formulas.map((x) => {
-                                            if (x.id !== f.id) return x;
-                                            const copy = [...(x.ingredients || [])];
-                                            const { amount } = splitIngredientAmount(
-                                              copy[ingIdx].amount,
-                                              copy[ingIdx].unit
-                                            );
-                                            copy[ingIdx] = {
-                                              ...copy[ingIdx],
-                                              amount,
-                                              unit: e.target.value,
-                                            };
-                                            return { ...x, ingredients: copy };
-                                          });
-                                          update({ formulas: newFs });
-                                        }}
-                                        placeholder=""
-                                        aria-label="Unit"
-                                        className="w-1/3 min-w-0 px-2 py-1 rounded-lg border border-slate-200 bg-white text-xs"
-                                      />
-                                    </div>
-                                  </td>
-                                  <td className="p-1.5">
-                                    <input
-                                      type="text"
-                                      disabled={isViewOnly}
-                                      value={ing.note}
-                                      onChange={(e) => {
-                                        const newFs = project.formulas.map((x) => {
-                                          if (x.id !== f.id) return x;
-                                          const copy = [...(x.ingredients || [])];
-                                          copy[ingIdx] = {
-                                            ...copy[ingIdx],
-                                            note: e.target.value,
-                                          };
-                                          return { ...x, ingredients: copy };
-                                        });
-                                        update({ formulas: newFs });
-                                      }}
-                                      placeholder=""
-                                      className="w-full px-2 py-1 rounded-lg border border-slate-200 bg-white text-xs"
-                                    />
-                                  </td>
-                                  {!isViewOnly && (
-                                    <td className="p-1.5 text-center">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const newFs = project.formulas.map((x) => {
-                                            if (x.id !== f.id) return x;
-                                            const copy = (
-                                              x.ingredients || []
-                                            ).filter((_, idx) => idx !== ingIdx);
-                                            return { ...x, ingredients: copy };
-                                          });
-                                          update({ formulas: newFs });
-                                        }}
-                                        className="text-slate-400 hover:text-rose-600 p-1"
-                                        title="Remove ingredient"
-                                      >
-                                        ×
-                                      </button>
-                                    </td>
-                                  )}
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                    </fieldset>
+                      </fieldset>
                     </div>
                   </div>
                 );
@@ -2461,21 +1251,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </div>
       )}
 
-      {/* TAB 3: PACKAGING */}
+      {/* TAB 3: PACKAGING (Responsive + Instant Update) */}
       {activeTab === 'packaging' && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="space-y-4 sm:space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-base font-bold text-slate-900 font-heading">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 font-heading">
                 Packaging & Materials Specifications
               </h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-[11px] sm:text-xs text-slate-500">
                 {project.packaging.length} packaging components tracked
               </p>
             </div>
 
-            {/* ปุ่มเพิ่มบรรจุภัณฑ์ใหม่: ปลดล็อกให้กดได้ทันทีโดยไม่ต้องผ่านโหมด Edit */}
-            <div className="ml-auto flex items-center gap-2">
+            <div className="flex items-center gap-2 self-start sm:self-auto">
               {!isViewOnly && (
                 <button
                   type="button"
@@ -2498,9 +1287,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       status: 'Not Started',
                       vatIncluded: false,
                     };
-                    updateImmediately({ packaging: [...project.packaging, newItem] });
+                    const basePackages = (draftProject || savedProject).packaging || [];
+                    updateImmediately({ packaging: [...basePackages, newItem] });
                   }}
-                  className="flex items-center gap-1.5 text-xs font-extrabold px-4 py-2 rounded-xl bg-[#ccf835] hover:bg-[#bced28] text-slate-950 transition-colors cursor-pointer shadow-xs"
+                  className="flex items-center gap-1.5 text-xs font-extrabold px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-[#ccf835] hover:bg-[#bced28] text-slate-950 transition-colors cursor-pointer shadow-xs"
                 >
                   <Plus className="w-4 h-4 stroke-[3]" />
                   <span>Add Package</span>
@@ -2509,65 +1299,50 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
           </div>
 
-          <div className="space-y-5">
+          <div className="space-y-4">
             {project.packaging.length === 0 ? (
-              <div className="p-10 text-center text-slate-400 bg-white rounded-3xl border border-dashed border-slate-200">
+              <div className="p-8 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200 text-xs">
                 No packaging components added yet. Click "+ Add Package" above.
               </div>
             ) : (
               project.packaging.map((it) => {
                 const pkgPriceRes = lookup(it.steps, Number(project.qty) || 0);
                 const packagePanelId = `packaging-${it.id}`;
-                const isBelowMoq =
-                  project.qty &&
-                  Number(it.moq) &&
-                  Number(project.qty) < Number(it.moq);
 
                 return (
                   <div
                     key={it.id}
-                    className={`p-6 rounded-3xl border bg-white shadow-2xs space-y-4 transition-all ${
+                    className={`p-4 sm:p-6 rounded-2xl sm:rounded-3xl border bg-white shadow-2xs space-y-4 transition-all ${
                       it.selectedForCost !== false
                         ? 'border-slate-200'
                         : 'border-slate-200 bg-slate-50/60 opacity-80'
                     }`}
                   >
-                    {/* Header: ปุ่มคอนโทรลด้านซ้าย + ปุ่ม Edit & ปุ่มลบ X ขวาสุดสวยงาม */}
-                    <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        {/* Checkbox to select for cost calculation */}
-                        <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 transition-colors">
+                    {/* Packaging Item Header - Fully Responsive Layout */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap w-full sm:w-auto">
+                        <label className="flex items-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">
                           <input
                             type="checkbox"
-                            disabled={!canEdit(packagePanelId)}
+                            disabled={isViewOnly}
                             checked={it.selectedForCost !== false}
                             onChange={(e) => {
-                              const copy = project.packaging.map((x) =>
-                                x.id === it.id
-                                  ? { ...x, selectedForCost: e.target.checked }
-                                  : x
-                              );
-                              update({ packaging: copy });
+                              updateSinglePackage(it.id, { selectedForCost: e.target.checked });
                             }}
-                            className="w-4 h-4 accent-teal-600 rounded-sm cursor-pointer disabled:opacity-50"
+                            className="w-4 h-4 accent-teal-600 rounded-sm cursor-pointer"
                           />
-                          <span className="text-xs font-bold text-slate-800">
-                            Include in Cost Calculation
+                          <span className="text-[11px] sm:text-xs font-bold text-slate-800">
+                            Include Cost
                           </span>
                         </label>
 
                         <select
-                          disabled={!canEdit(packagePanelId)}
+                          disabled={isViewOnly}
                           value={it.type}
                           onChange={(e) => {
-                            const copy = project.packaging.map((x) =>
-                              x.id === it.id
-                                ? { ...x, type: e.target.value as any }
-                                : x
-                            );
-                            update({ packaging: copy });
+                            updateSinglePackage(it.id, { type: e.target.value as any });
                           }}
-                          className="text-xs px-3 py-1.5 rounded-xl border border-slate-200 font-bold bg-white disabled:opacity-70"
+                          className="text-[11px] sm:text-xs px-2.5 py-1 rounded-xl border border-slate-200 font-bold bg-white"
                         >
                           {PKG_TYPES.map((t) => (
                             <option key={t} value={t}>
@@ -2576,98 +1351,58 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           ))}
                         </select>
 
-                        {/* Status in English */}
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] font-bold text-slate-400">
-                            Status:
-                          </span>
-                          <select
-                            disabled={!canEdit(packagePanelId)}
-                            value={it.status || 'Not Started'}
-                            onChange={(e) => {
-                              const copy = project.packaging.map((x) =>
-                                x.id === it.id
-                                  ? { ...x, status: e.target.value as PackagingStatus }
-                                  : x
-                              );
-                              update({ packaging: copy });
-                            }}
-                            className={`text-xs px-3 py-1 rounded-xl border font-bold disabled:opacity-70 ${
-                              it.status === 'Completed'
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                                : it.status === 'In Production'
-                                ? 'bg-blue-50 text-blue-800 border-blue-300'
-                                : it.status === 'Design Approved'
-                                ? 'bg-purple-50 text-purple-800 border-purple-300'
-                                : it.status === 'In Design'
-                                ? 'bg-amber-50 text-amber-900 border-amber-300'
-                                : 'bg-slate-100 text-slate-600 border-slate-200'
-                            }`}
-                          >
-                            {PACKAGING_STATUS_LIST.map((st) => (
-                              <option key={st} value={st}>
-                                {st}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
-                          VAT
-                          <select
-                            disabled={!canEdit(packagePanelId)}
-                            value={it.vatIncluded ? 'included' : 'excluded'}
-                            onChange={(e) => {
-                              const copy = project.packaging.map((x) =>
-                                x.id === it.id
-                                  ? { ...x, vatIncluded: e.target.value === 'included' }
-                                  : x
-                              );
-                              update({ packaging: copy });
-                            }}
-                            className="px-2 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-70"
-                          >
-                            <option value="excluded">Not included</option>
-                            <option value="included">Included</option>
-                          </select>
-                        </label>
+                        <select
+                          disabled={isViewOnly}
+                          value={it.status || 'Not Started'}
+                          onChange={(e) => {
+                            updateSinglePackage(it.id, { status: e.target.value as PackagingStatus });
+                          }}
+                          className={`text-[11px] sm:text-xs px-2.5 py-1 rounded-xl border font-bold ${
+                            it.status === 'Completed'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                              : it.status === 'In Production'
+                              ? 'bg-blue-50 text-blue-800 border-blue-300'
+                              : it.status === 'Design Approved'
+                              ? 'bg-purple-50 text-purple-800 border-purple-300'
+                              : it.status === 'In Design'
+                              ? 'bg-amber-50 text-amber-900 border-amber-300'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                          }`}
+                        >
+                          {PACKAGING_STATUS_LIST.map((st) => (
+                            <option key={st} value={st}>
+                              {st}
+                            </option>
+                          ))}
+                        </select>
 
                         {costPrivacy ? (
-                          <span className="text-xs text-slate-400 font-mono">
-                            ••••••
-                          </span>
+                          <span className="text-xs text-slate-400 font-mono">••••••</span>
                         ) : (
-                          <span className="text-sm font-extrabold text-slate-900">
+                          <span className="text-xs sm:text-sm font-extrabold text-slate-900">
                             {pkgPriceRes.has
-                              ? `${baht(pkgPriceRes.price * (it.vatIncluded ? 1 : 1 + VAT_RATE))} ฿ / pc`
+                              ? `${baht(pkgPriceRes.price * (it.vatIncluded ? 1 : 1 + VAT_RATE))} ฿/pc`
                               : 'Price not set'}
-                          </span>
-                        )}
-
-                        {isBelowMoq && (
-                          <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
-                            Below MOQ ({it.moq})
                           </span>
                         )}
                       </div>
 
-                      {/* ฝั่งขวาสุด: จัดวางปุ่ม Edit, ยุบขยาย และปุ่มลบ X สวยงามเป็นระเบียบ */}
-                      <div className="ml-auto flex items-center gap-2">
-                        {panelActions(packagePanelId)}
+                      {/* Right controls: Collapse & Delete (Always aligned neatly) */}
+                      <div className="flex items-center justify-end gap-2 w-full sm:w-auto mt-1 sm:mt-0">
+                        {panelToggle(packagePanelId)}
 
                         {!isViewOnly && (
                           <button
                             type="button"
                             onClick={() => {
-                              if (confirm(`Are you sure you want to delete ${it.name || 'this packaging'}?`)) {
-                                const copy = project.packaging.filter(
-                                  (x) => x.id !== it.id
-                                );
+                              if (confirm(`Delete ${it.name || 'this packaging'}?`)) {
+                                const basePackages = (draftProject || savedProject).packaging || [];
+                                const copy = basePackages.filter((x) => x.id !== it.id);
                                 updateImmediately({ packaging: copy });
                               }
                             }}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors cursor-pointer shadow-2xs"
-                            title="Delete packaging"
+                            title="Delete"
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -2675,198 +1410,148 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                     </div>
 
-                    <div hidden={collapsedPanels.has(packagePanelId)}>
-                    <fieldset disabled={!canEdit(packagePanelId)} className="contents">
-                    {/* Basic specs: Name, Supplier, MOQ */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Item Name
-                        </label>
-                        <input
-                          type="text"
-                          value={it.name}
-                          onChange={(e) => {
-                            const copy = project.packaging.map((x) =>
-                              x.id === it.id ? { ...x, name: e.target.value } : x
-                            );
-                            update({ packaging: copy });
-                          }}
-                          placeholder=""
-                          className="w-full text-xs px-3.5 py-2 rounded-xl border border-slate-200 bg-white font-medium"
-                        />
-                      </div>
+                    <div hidden={collapsedPanels.has(packagePanelId)} className="space-y-4">
+                      {/* Name, Supplier, MOQ */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Item Name
+                          </label>
+                          <input
+                            type="text"
+                            disabled={isViewOnly}
+                            value={it.name}
+                            onChange={(e) => updateSinglePackage(it.id, { name: e.target.value })}
+                            placeholder=""
+                            className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 bg-white font-medium"
+                          />
+                        </div>
 
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Supplier / Printer
-                        </label>
-                        <input
-                          type="text"
-                          value={it.supplier}
-                          onChange={(e) => {
-                            const copy = project.packaging.map((x) =>
-                              x.id === it.id
-                                ? { ...x, supplier: e.target.value }
-                                : x
-                            );
-                            update({ packaging: copy });
-                          }}
-                          placeholder=""
-                          className="w-full text-xs px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
-                        />
-                      </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Supplier / Printer
+                          </label>
+                          <input
+                            type="text"
+                            disabled={isViewOnly}
+                            value={it.supplier}
+                            onChange={(e) => updateSinglePackage(it.id, { supplier: e.target.value })}
+                            placeholder=""
+                            className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
+                          />
+                        </div>
 
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          MOQ (Units)
-                        </label>
-                        <input
-                          type="number"
-                          value={it.moq}
-                          onChange={(e) => {
-                            const copy = project.packaging.map((x) =>
-                              x.id === it.id ? { ...x, moq: e.target.value } : x
-                            );
-                            update({ packaging: copy });
-                          }}
-                          placeholder=""
-                          className="w-full text-xs px-3.5 py-2 rounded-xl border border-slate-200 bg-white font-medium"
-                        />
-                      </div>
-                    </div>
-
-                    {/* EXPANDED SPECIFICATIONS & DETAILS FIELD */}
-                    <div className="pt-2">
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Detailed Specifications, Dimensions & Dieline (ช่องใส่สเปกและรายละเอียดแบบขยาย)
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={it.spec}
-                        onChange={(e) => {
-                          const copy = project.packaging.map((x) =>
-                            x.id === it.id ? { ...x, spec: e.target.value } : x
-                          );
-                          update({ packaging: copy });
-                        }}
-                        placeholder=""
-                        className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
-                      />
-                    </div>
-
-                    {/* Terms & Commercials: Plate Cost, Lead Time, Payment Terms, Warranty */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-50/80 rounded-2xl border border-slate-200 mt-2">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Plate / Mold Cost (THB)
-                        </label>
-                        {costPrivacy ? (
-                          <div className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-100 font-mono text-slate-400">
-                            ••••••
-                          </div>
-                        ) : (
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            MOQ (Units)
+                          </label>
                           <input
                             type="number"
-                            min="0"
-                            step="any"
-                            value={it.plateCost || ''}
-                            onChange={(e) => {
-                              const copy = project.packaging.map((x) =>
-                                x.id === it.id
-                                  ? { ...x, plateCost: e.target.value }
-                                  : x
-                              );
-                              update({ packaging: copy });
-                            }}
+                            disabled={isViewOnly}
+                            value={it.moq}
+                            onChange={(e) => updateSinglePackage(it.id, { moq: e.target.value })}
+                            placeholder=""
+                            className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 bg-white font-medium"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Spec */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Specifications, Dimensions & Dieline
+                        </label>
+                        <textarea
+                          rows={2}
+                          disabled={isViewOnly}
+                          value={it.spec}
+                          onChange={(e) => updateSinglePackage(it.id, { spec: e.target.value })}
+                          placeholder=""
+                          className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                        />
+                      </div>
+
+                      {/* Commercial Details */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3.5 sm:p-4 bg-slate-50/80 rounded-2xl border border-slate-200">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Plate / Mold Cost (THB)
+                          </label>
+                          {costPrivacy ? (
+                            <div className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-100 font-mono text-slate-400">
+                              ••••••
+                            </div>
+                          ) : (
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              disabled={isViewOnly}
+                              value={it.plateCost || ''}
+                              onChange={(e) => updateSinglePackage(it.id, { plateCost: e.target.value })}
+                              placeholder=""
+                              className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white"
+                            />
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Production Lead Time
+                          </label>
+                          <input
+                            type="text"
+                            disabled={isViewOnly}
+                            value={it.leadTime || ''}
+                            onChange={(e) => updateSinglePackage(it.id, { leadTime: e.target.value })}
                             placeholder=""
                             className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white"
                           />
-                        )}
-                        <span className="text-[10px] text-slate-400 block mt-0.5">
-                          Amortized into unit cost
-                        </span>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Payment Terms
+                          </label>
+                          <input
+                            type="text"
+                            disabled={isViewOnly}
+                            value={it.paymentTerm || ''}
+                            onChange={(e) => updateSinglePackage(it.id, { paymentTerm: e.target.value })}
+                            placeholder=""
+                            className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Warranty & Claims
+                          </label>
+                          <input
+                            type="text"
+                            disabled={isViewOnly}
+                            value={it.warrantyTerms || ''}
+                            onChange={(e) => updateSinglePackage(it.id, { warrantyTerms: e.target.value })}
+                            placeholder=""
+                            className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white"
+                          />
+                        </div>
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Production Lead Time
-                        </label>
-                        <input
-                          type="text"
-                          value={it.leadTime || ''}
-                          onChange={(e) => {
-                            const copy = project.packaging.map((x) =>
-                              x.id === it.id
-                                ? { ...x, leadTime: e.target.value }
-                                : x
-                            );
-                            update({ packaging: copy });
-                          }}
-                          placeholder=""
-                          className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white"
-                        />
-                      </div>
+                      {/* Pricing ladder & Images */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-200 space-y-2">
+                          <span className="text-xs font-bold text-slate-800 block">
+                            Tiered Pricing Ladder
+                          </span>
 
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Payment Terms
-                        </label>
-                        <input
-                          type="text"
-                          value={it.paymentTerm || ''}
-                          onChange={(e) => {
-                            const copy = project.packaging.map((x) =>
-                              x.id === it.id
-                                ? { ...x, paymentTerm: e.target.value }
-                                : x
-                            );
-                            update({ packaging: copy });
-                          }}
-                          placeholder=""
-                          className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Warranty & Claims
-                        </label>
-                        <input
-                          type="text"
-                          value={it.warrantyTerms || ''}
-                          onChange={(e) => {
-                            const copy = project.packaging.map((x) =>
-                              x.id === it.id
-                                ? { ...x, warrantyTerms: e.target.value }
-                                : x
-                            );
-                            update({ packaging: copy });
-                          }}
-                          placeholder=""
-                          className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
-                        <span className="text-xs font-bold text-slate-800 block">
-                          Tiered Pricing Ladder
-                        </span>
-
-                        {costPrivacy ? (
-                          <div className="py-4 text-center text-xs text-slate-400 bg-white rounded-xl border border-slate-200 font-mono">
-                            •••••• Pricing Tiers Hidden
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
+                          <div className="space-y-1.5">
                             <table className="w-full text-xs text-left">
                               <thead>
-                                <tr className="text-slate-500 font-bold border-b border-slate-200 text-[11px]">
-                                  <th className="py-1">From (Units)</th>
+                                <tr className="text-slate-500 font-bold border-b border-slate-200 text-[10px] sm:text-[11px]">
+                                  <th className="py-1">From Qty</th>
                                   <th className="py-1">Price (THB/pc)</th>
-                                  <th className="py-1 w-8"></th>
+                                  <th className="py-1 w-6"></th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
@@ -2876,18 +1561,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                       <input
                                         type="number"
                                         min="0"
+                                        disabled={isViewOnly}
                                         value={st.qty}
-                                        onChange={(e) =>
-                                          updateStep(
-                                            'packaging',
-                                            it.id,
-                                            sidx,
-                                            'qty',
-                                            e.target.value
-                                          )
-                                        }
-                                        placeholder=""
-                                        className="w-full px-2.5 py-1 rounded-lg border border-slate-200 bg-white"
+                                        onChange={(e) => updateStep('packaging', it.id, sidx, 'qty', e.target.value)}
+                                        className="w-full px-2 py-1 rounded-lg border border-slate-200 bg-white"
                                       />
                                     </td>
                                     <td className="py-1 pr-1">
@@ -2895,153 +1572,108 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                         type="number"
                                         step="any"
                                         min="0"
+                                        disabled={isViewOnly}
                                         value={st.price}
-                                        onChange={(e) =>
-                                          updateStep(
-                                            'packaging',
-                                            it.id,
-                                            sidx,
-                                            'price',
-                                            e.target.value
-                                          )
-                                        }
-                                        placeholder=""
-                                        className="w-full px-2.5 py-1 rounded-lg border border-slate-200 bg-white"
+                                        onChange={(e) => updateStep('packaging', it.id, sidx, 'price', e.target.value)}
+                                        className="w-full px-2 py-1 rounded-lg border border-slate-200 bg-white"
                                       />
                                     </td>
                                     <td className="py-1 text-center">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          deleteStep('packaging', it.id, sidx)
-                                        }
-                                        className="text-slate-400 hover:text-rose-600 text-sm"
-                                        title="Delete step"
-                                      >
-                                        ×
-                                      </button>
+                                      {!isViewOnly && (
+                                        <button
+                                          type="button"
+                                          onClick={() => deleteStep('packaging', it.id, sidx)}
+                                          className="text-slate-400 hover:text-rose-600 text-sm cursor-pointer"
+                                        >
+                                          ×
+                                        </button>
+                                      )}
                                     </td>
                                   </tr>
                                 ))}
                               </tbody>
                             </table>
 
-                            <button
-                              type="button"
-                              onClick={() => addStep('packaging', it.id)}
-                              className="text-xs text-teal-700 hover:underline font-bold cursor-pointer"
-                            >
-                              + Add Price Tier
-                            </button>
+                            {!isViewOnly && (
+                              <button
+                                type="button"
+                                onClick={() => addStep('packaging', it.id)}
+                                className="text-xs text-teal-700 hover:underline font-bold cursor-pointer block pt-1"
+                              >
+                                + Add Price Tier
+                              </button>
+                            )}
                           </div>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="block text-xs font-bold text-slate-700">
-                            Packaging Mockup & Dieline Images ({it.images?.length || 0})
-                          </label>
-                          {!isViewOnly && (
-                            <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Upload Images</span>
-                              <input
-                                type="file"
-                                multiple
-                                accept="image/png, image/jpeg, image/jpg, image/webp"
-                                onClick={(e) => {
-                                  (e.target as HTMLInputElement).value = '';
-                                }}
-                                onChange={(e) =>
-                                  handleMultipleImageUpload(
-                                    e,
-                                    it.images || [],
-                                    (newImgs) => {
-                                      const copy = project.packaging.map((x) =>
-                                        x.id === it.id ? { ...x, images: newImgs } : x
-                                      );
-                                      updateImmediately({ packaging: copy });
-                                    }
-                                  )
-                                }
-                                className="hidden"
-                              />
-                            </label>
-                          )}
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2 p-2.5 rounded-2xl bg-slate-50 border border-slate-200 min-h-[90px]">
-                          {(!it.images || it.images.length === 0) ? (
-                            <div className="col-span-3 py-4 text-center text-slate-400 text-xs flex flex-col items-center justify-center">
-                              <ImageIcon className="w-5 h-5 text-slate-300 mb-1" />
-                              <span>No packaging images attached</span>
-                            </div>
-                          ) : (
-                            it.images.map((imgUrl, imgIdx) => (
-                              <div
-                                key={imgIdx}
-                                className="relative rounded-xl overflow-hidden border border-slate-200 bg-white aspect-square flex items-center justify-center group"
-                              >
-                                <img
-                                  src={imgUrl}
-                                  alt={`Packaging ${imgIdx + 1}`}
-                                  onClick={() =>
-                                    setPreviewImage({
-                                      src: imgUrl,
-                                      alt: `Packaging ${imgIdx + 1}`,
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="block text-xs font-bold text-slate-700">
+                              Mockup & Dieline Images ({it.images?.length || 0})
+                            </label>
+                            {!isViewOnly && (
+                              <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Upload</span>
+                                <input
+                                  type="file"
+                                  multiple
+                                  accept="image/png, image/jpeg, image/jpg, image/webp"
+                                  onClick={(e) => {
+                                    (e.target as HTMLInputElement).value = '';
+                                  }}
+                                  onChange={(e) =>
+                                    handleMultipleImageUpload(e, it.images || [], (newImgs) => {
+                                      updateSinglePackage(it.id, { images: newImgs });
                                     })
                                   }
-                                  onKeyDown={(event) => {
-                                    if (event.key === 'Enter' || event.key === ' ') {
-                                      event.preventDefault();
+                                  className="hidden"
+                                />
+                              </label>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 p-2 rounded-xl bg-slate-50 border border-slate-200 min-h-[80px]">
+                            {(!it.images || it.images.length === 0) ? (
+                              <div className="col-span-3 py-3 text-center text-slate-400 text-xs flex flex-col items-center justify-center">
+                                <ImageIcon className="w-4 h-4 text-slate-300 mb-1" />
+                                <span>No images</span>
+                              </div>
+                            ) : (
+                              it.images.map((imgUrl, imgIdx) => (
+                                <div
+                                  key={imgIdx}
+                                  className="relative rounded-lg overflow-hidden border border-slate-200 bg-white aspect-square flex items-center justify-center group"
+                                >
+                                  <img
+                                    src={imgUrl}
+                                    alt={`Packaging ${imgIdx + 1}`}
+                                    onClick={() =>
                                       setPreviewImage({
                                         src: imgUrl,
                                         alt: `Packaging ${imgIdx + 1}`,
-                                      });
+                                      })
                                     }
-                                  }}
-                                  role="button"
-                                  tabIndex={0}
-                                  className="h-full w-full cursor-zoom-in object-cover"
-                                />
-                                {!isViewOnly && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const newImgs = (it.images || []).filter(
-                                        (_, idx) => idx !== imgIdx
-                                      );
-                                      const copy = project.packaging.map((x) =>
-                                        x.id === it.id ? { ...x, images: newImgs } : x
-                                      );
-                                      updateImmediately({ packaging: copy });
-                                    }}
-                                    className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                )}
-                              </div>
-                            ))
-                          )}
+                                    className="h-full w-full cursor-zoom-in object-cover"
+                                  />
+                                  {!isViewOnly && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newImgs = (it.images || []).filter((_, idx) => idx !== imgIdx);
+                                        updateSinglePackage(it.id, { images: newImgs });
+                                      }}
+                                      className="absolute top-1 right-1 p-0.5 rounded-md bg-rose-600 text-white cursor-pointer"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              ))
+                            )}
+                          </div>
                         </div>
-
-                        <input
-                          type="text"
-                          value={it.note}
-                          onChange={(e) => {
-                            const copy = project.packaging.map((x) =>
-                              x.id === it.id ? { ...x, note: e.target.value } : x
-                            );
-                            update({ packaging: copy });
-                          }}
-                          placeholder=""
-                          className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white"
-                        />
                       </div>
-                    </div>
-                    </fieldset>
                     </div>
                   </div>
                 );
@@ -3054,327 +1686,37 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* TAB 4: COST & BUDGET */}
       {activeTab === 'cost' && (
         isViewOnly ? (
-          <div className="bg-white p-8 sm:p-12 rounded-3xl border border-slate-200 text-center space-y-3">
+          <div className="bg-white p-8 sm:p-12 rounded-2xl sm:rounded-3xl border border-slate-200 text-center space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
               <Lock className="w-6 h-6" />
             </div>
             <h4 className="text-base font-bold text-slate-900 font-heading">
               Cost & Budget Restricted
             </h4>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              Cost analysis and financial records are restricted for the Viewer role.
-            </p>
           </div>
         ) : (
-          <div className="space-y-6">
-            <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-              <h3 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2 font-heading">
+          <div className="space-y-4 sm:space-y-6">
+            <section className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-2xs space-y-4">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2 font-heading">
                 <span>Cost & Budget Analysis</span>
-                {costPrivacy && (
-                  <span className="text-xs font-bold text-amber-900 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 flex items-center gap-1.5">
-                    <EyeOff className="w-3.5 h-3.5" />
-                    <span>Presentation Mode Active</span>
-                  </span>
-                )}
                 <span className="ml-auto flex items-center gap-2">
                   {panelToggle('cost-summary')}
                 </span>
               </h3>
 
-            <div hidden={collapsedPanels.has('cost-summary')}>
-              <CostSummary
-                project={project}
-                costSummary={co}
-                costPrivacy={costPrivacy}
-              />
-            </div>
-          </section>
-
-          <fieldset disabled={!canEdit('cost-other')} className="contents">
-          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 font-heading">
-                  Operating, Logistics & Incidental Expenses
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Customizable allocation unit (e.g. per piece, per trip, per lot, per kg, per carton)
-                </p>
+              <div hidden={collapsedPanels.has('cost-summary')}>
+                <CostSummary project={project} costSummary={co} costPrivacy={costPrivacy} />
               </div>
-
-              <div className="ml-auto flex shrink-0 items-center gap-2">
-                <button
-                  onClick={() =>
-                    update({
-                      other: [
-                        ...project.other,
-                        {
-                          id: uid(),
-                          name: '',
-                          unit: 'Piece',
-                          amount: '',
-                          times: '',
-                          note: '',
-                          vatIncluded: false,
-                        },
-                      ],
-                    })
-                  }
-                  className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Expense Item</span>
-                </button>
-                {panelActions('cost-other')}
-              </div>
-            </div>
-
-            <div
-              className="overflow-x-auto rounded-2xl border border-slate-200"
-              hidden={collapsedPanels.has('cost-other')}
-            >
-              <table className="w-full text-xs text-left min-w-[760px]">
-                <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
-                  <tr>
-                    <th className="py-2.5 px-3.5">Expense Description</th>
-                    <th className="py-2.5 px-3">Allocation Unit</th>
-                    <th className="py-2.5 px-3">Amount (THB)</th>
-                    <th className="py-2.5 px-3">Frequency / Trips</th>
-                    <th className="py-2.5 px-3 text-right">Cost Per Unit (THB)</th>
-                    <th className="py-2.5 px-3">Notes</th>
-                    <th className="py-2.5 px-2 w-10 text-center"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {project.other.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-6 text-center text-slate-400">
-                        No additional expenses recorded. Click "+ Add Expense Item" above.
-                      </td>
-                    </tr>
-                  ) : (
-                    project.other.map((o, idx) => {
-                      const baseCostPerUnit = otherPer(o, Number(project.qty) || 0);
-                      const costPerUnit =
-                        baseCostPerUnit * (o.vatIncluded ? 1 : 1 + VAT_RATE);
-                      return (
-                        <tr key={o.id} className="hover:bg-slate-50/70">
-                          <td className="p-2 pl-3.5">
-                            <input
-                              type="text"
-                              value={o.name}
-                              onChange={(e) => {
-                                const copy = [...project.other];
-                                copy[idx].name = e.target.value;
-                                update({ other: copy });
-                              }}
-                              placeholder=""
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
-                            />
-                          </td>
-
-                          <td className="p-2">
-                            <input
-                              type="text"
-                              list="unit-suggestions"
-                              value={o.unit}
-                              onChange={(e) => {
-                                const copy = [...project.other];
-                                copy[idx].unit = e.target.value;
-                                update({ other: copy });
-                              }}
-                              placeholder=""
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-800"
-                            />
-                          </td>
-
-                          <td className="p-2">
-                            {costPrivacy ? (
-                              <input
-                                type="text"
-                                disabled
-                                value="••••••"
-                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-400 font-mono"
-                              />
-                            ) : (
-                              <input
-                                type="number"
-                                step="any"
-                                min="0"
-                                value={o.amount}
-                                onChange={(e) => {
-                                  const copy = [...project.other];
-                                  copy[idx].amount = e.target.value;
-                                  update({ other: copy });
-                                }}
-                                placeholder=""
-                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
-                              />
-                            )}
-                            <select
-                              value={o.vatIncluded ? 'included' : 'excluded'}
-                              onChange={(e) => {
-                                const copy = [...project.other];
-                                copy[idx] = {
-                                  ...copy[idx],
-                                  vatIncluded: e.target.value === 'included',
-                                };
-                                update({ other: copy });
-                              }}
-                              className="mt-1 w-full px-2 py-1 rounded-lg border border-slate-200 bg-white text-[11px]"
-                              aria-label="VAT status"
-                            >
-                              <option value="excluded">Not included VAT</option>
-                              <option value="included">VAT included</option>
-                            </select>
-                          </td>
-
-                          <td className="p-2">
-                            {o.unit === 'เที่ยว' || o.unit === 'Trip' || o.unit === 'ครั้ง' || o.unit === 'Box' ? (
-                              <input
-                                type="number"
-                                min="1"
-                                value={o.times || 1}
-                                onChange={(e) => {
-                                  const copy = [...project.other];
-                                  copy[idx].times = e.target.value;
-                                  update({ other: copy });
-                                }}
-                                placeholder=""
-                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-center"
-                              />
-                            ) : (
-                              <span className="text-slate-400 pl-3">-</span>
-                            )}
-                          </td>
-
-                          <td className="p-2 text-right tabular-nums font-bold">
-                            {costPrivacy ? (
-                              <span className="text-slate-400 font-mono">
-                                ••••••
-                              </span>
-                            ) : (
-                              <span className="text-slate-800">
-                                {baht(costPerUnit)} ฿
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="p-2">
-                            <input
-                              type="text"
-                              value={o.note}
-                              onChange={(e) => {
-                                const copy = [...project.other];
-                                copy[idx].note = e.target.value;
-                              }}
-                              placeholder=""
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
-                            />
-                          </td>
-
-                          <td className="p-2 text-center">
-                            <button
-                              onClick={() => {
-                                const copy = project.other.filter(
-                                  (x) => x.id !== o.id
-                                );
-                                update({ other: copy });
-                              }}
-                              className="text-slate-400 hover:text-rose-600 p-1"
-                              title="Delete"
-                            >
-                              ×
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <datalist id="unit-suggestions">
-              <option value="Piece" />
-              <option value="Trip" />
-              <option value="Lot" />
-              <option value="Kg" />
-              <option value="Carton" />
-              <option value="Time" />
-              <option value="ชิ้น" />
-              <option value="เที่ยว" />
-              <option value="ล็อต" />
-            </datalist>
-          </section>
-          </fieldset>
-        </div>
+            </section>
+          </div>
         )
       )}
 
       {/* TAB 5: TIMELINE & GANTT */}
       {activeTab === 'timeline' && (
-        <div className="space-y-6">
-          {!isViewOnly && (
-          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-3">
-            <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 font-heading">
-              <span className="min-w-0 flex-1">Timeline Milestones & Delivery Schedule</span>
-              {panelToggle('timeline-summary')}
-            </h3>
-
-            <div
-              className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs"
-              hidden={collapsedPanels.has('timeline-summary')}
-            >
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
-                <span className="text-slate-400 block mb-0.5 font-medium">
-                  First Task Start Date
-                </span>
-                <b className="text-sm font-extrabold text-slate-800">
-                  {fmt(s.first)}
-                </b>
-              </div>
-
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
-                <span className="text-slate-400 block mb-0.5 font-medium">
-                  Estimated Delivery / Inspection
-                </span>
-                <b className="text-sm font-extrabold text-slate-800">
-                  {fmt(s.last)}
-                </b>
-              </div>
-
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
-                <span className="text-slate-400 block mb-0.5 font-medium">
-                  Total Working Duration
-                </span>
-                <b className="text-sm font-extrabold text-slate-800">
-                  {s.wd} workdays (~{Math.ceil(s.wd / 5)} weeks)
-                </b>
-              </div>
-
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
-                <span className="text-slate-400 block mb-0.5 font-medium">
-                  Target Launch Schedule
-                </span>
-                <b
-                  className={`text-sm font-extrabold ${
-                    s.vc === 'ok'
-                      ? 'text-teal-700'
-                      : s.vc === 'late'
-                      ? 'text-rose-600'
-                      : 'text-amber-700'
-                  }`}
-                >
-                  {s.vs || 'Launch target not set'}
-                </b>
-              </div>
-            </div>
-          </section>
-          )}
-
-          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-            <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 font-heading">
+        <div className="space-y-4 sm:space-y-6">
+          <section className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-2xs space-y-4">
+            <h3 className="flex items-center gap-2 text-sm sm:text-base font-bold text-slate-900 font-heading">
               <span className="min-w-0 flex-1">Weekly Gantt Chart</span>
               {panelToggle('timeline-gantt')}
             </h3>
@@ -3382,477 +1724,61 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <GanttChart project={project} computedTasks={cs} />
             </div>
           </section>
-
-          {!isViewOnly && (
-          <fieldset disabled={!canEdit('timeline-schedule')} className="contents">
-          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 font-heading">
-                  Phased Task Schedule
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Modifying working days or dependencies dynamically reschedules downstream phases
-                </p>
-              </div>
-              <div className="ml-auto flex items-center gap-2">
-                {panelActions('timeline-schedule')}
-              </div>
-            </div>
-
-            <div
-              className="overflow-x-auto rounded-2xl border border-slate-200"
-              hidden={collapsedPanels.has('timeline-schedule')}
-            >
-              <table className="w-full text-xs text-left min-w-[840px]">
-                <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
-                  <tr>
-                    <th className="py-2.5 px-3.5 min-w-[220px]">Task Name</th>
-                    <th className="py-2.5 px-3 min-w-[200px]">Depends On</th>
-                    <th className="py-2.5 px-3 min-w-[120px]">Start Date</th>
-                    <th className="py-2.5 px-2 w-20 text-center">Workdays</th>
-                    <th className="py-2.5 px-3 min-w-[100px]">End Date</th>
-                    <th className="py-2.5 px-2 w-14 text-center">Done</th>
-                    <th className="py-2.5 px-2 w-8 text-center"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {project.phases.map((ph) => {
-                    const earlierTasks = flatTasks(project);
-
-                    return (
-                      <React.Fragment key={ph.k}>
-                        <tr className="bg-slate-100/90 font-bold text-slate-900">
-                          <td colSpan={7} className="py-2.5 px-3.5">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="w-2.5 h-2.5 rounded-sm"
-                                  style={{
-                                    backgroundColor: phaseColors[ph.k] || '#475569',
-                                  }}
-                                />
-                                <span>
-                                  Phase {ph.k}: {ph.name}
-                                </span>
-                              </div>
-
-                              <button
-                                onClick={() => {
-                                  const lastT = ph.tasks[ph.tasks.length - 1];
-                                  const newTask = {
-                                    id: uid(),
-                                    name: 'New Task',
-                                    days: 5,
-                                    dep: lastT ? lastT.id : '@all',
-                                    start: '',
-                                    done: false,
-                                  };
-                                  const newPhases = project.phases.map((x) =>
-                                    x.k === ph.k
-                                      ? { ...x, tasks: [...x.tasks, newTask] }
-                                      : x
-                                  );
-                                  update({ phases: newPhases });
-                                }}
-                                className="text-[11px] font-bold text-slate-800 bg-white hover:bg-amber-50 px-3 py-1 rounded-lg border border-slate-200 shadow-2xs transition-colors cursor-pointer"
-                              >
-                                + Add Task
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-
-                        {ph.tasks.map((t) => {
-                          const r = cs[t.id];
-                          const earlier = earlierTasks.filter(
-                            (x) => x.id !== t.id
-                          );
-
-                          return (
-                            <tr
-                              key={t.id}
-                              className="hover:bg-slate-50/70 transition-colors"
-                            >
-                              <td className="p-2 pl-3.5">
-                                <input
-                                  type="text"
-                                  value={t.name}
-                                  onChange={(e) => {
-                                    const newPhases = project.phases.map((x) => ({
-                                      ...x,
-                                      tasks: x.tasks.map((task) =>
-                                        task.id === t.id
-                                          ? { ...task, name: e.target.value }
-                                          : task
-                                      ),
-                                    }));
-                                    update({ phases: newPhases });
-                                  }}
-                                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
-                                />
-                              </td>
-
-                              <td className="p-2">
-                                <select
-                                  value={t.dep}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    const newPhases = project.phases.map((x) => ({
-                                      ...x,
-                                      tasks: x.tasks.map((task) => {
-                                        if (task.id === t.id) {
-                                          let start = task.start;
-                                          if (val === '' && !start) {
-                                            start =
-                                              cs[task.id]?.s ||
-                                              project.startDate;
-                                          }
-                                          return {
-                                            ...task,
-                                            dep: val,
-                                            start,
-                                          };
-                                        }
-                                        return task;
-                                      }),
-                                    }));
-                                    update({ phases: newPhases });
-                                  }}
-                                  className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
-                                >
-                                  <option value="@start">Project Start Date</option>
-                                  <option value="@all">
-                                    After All Preceding Tasks
-                                  </option>
-                                  {earlier.map((x) => (
-                                    <option key={x.id} value={x.id}>
-                                      After: {x.name || '(Untitled)'}
-                                    </option>
-                                  ))}
-                                  <option value="">Custom Start Date</option>
-                                </select>
-                              </td>
-
-                              <td className="p-2">
-                                {t.dep === '@start' ||
-                                t.dep === '@all' ||
-                                (t.dep && earlier.some((x) => x.id === t.dep)) ? (
-                                  <span className="tabular-nums text-slate-700 pl-2 font-medium">
-                                    {r ? fmt(r.s) : '-'}
-                                  </span>
-                                ) : (
-                                  <input
-                                    type="date"
-                                    value={t.start}
-                                    onChange={(e) => {
-                                      const newPhases = project.phases.map((x) => ({
-                                        ...x,
-                                        tasks: x.tasks.map((task) =>
-                                          task.id === t.id
-                                            ? {
-                                                ...task,
-                                                start: e.target.value,
-                                              }
-                                            : task
-                                        ),
-                                      }));
-                                      update({ phases: newPhases });
-                                    }}
-                                    className="w-full px-2 py-1 rounded-lg border border-slate-200 bg-white"
-                                  />
-                                )}
-                              </td>
-
-                              <td className="p-2">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  step="1"
-                                  value={t.days}
-                                  onChange={(e) => {
-                                    const val = Math.max(
-                                      1,
-                                      Math.round(Number(e.target.value)) || 1
-                                    );
-                                    const newPhases = project.phases.map((x) => ({
-                                      ...x,
-                                      tasks: x.tasks.map((task) =>
-                                        task.id === t.id
-                                          ? { ...task, days: val }
-                                          : task
-                                      ),
-                                    }));
-                                    update({ phases: newPhases });
-                                  }}
-                                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-center tabular-nums font-bold"
-                                />
-                              </td>
-
-                              <td className="p-2 tabular-nums font-bold text-slate-800">
-                                {r ? fmt(r.e) : '-'}
-                              </td>
-
-                              <td className="p-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={t.done}
-                                  onChange={(e) => {
-                                    const newPhases = project.phases.map((x) => ({
-                                      ...x,
-                                      tasks: x.tasks.map((task) =>
-                                        task.id === t.id
-                                          ? { ...task, done: e.target.checked }
-                                          : task
-                                      ),
-                                    }));
-                                    update({ phases: newPhases });
-                                  }}
-                                  className="w-4 h-4 accent-teal-600 rounded-sm cursor-pointer"
-                                />
-                              </td>
-
-                              <td className="p-2 text-center">
-                                <button
-                                  onClick={() => {
-                                    const newPhases = project.phases.map((x) => ({
-                                      ...x,
-                                      tasks: x.tasks.filter(
-                                        (task) => task.id !== t.id
-                                      ),
-                                    }));
-                                    update({ phases: newPhases });
-                                  }}
-                                  className="text-slate-400 hover:text-rose-600 p-1"
-                                  title="Delete task"
-                                >
-                                  ×
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-          </fieldset>
-          )}
         </div>
       )}
 
       {/* TAB 6: DOCUMENTS */}
       {activeTab === 'docs' && (
-        <div className="space-y-6">
-          <fieldset disabled={!canEdit('docs-upload')} className="contents">
-          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 font-heading">
-                  Project Documents & Attachments
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Attach links to certificates, test reports, artwork files, and contracts.
-                </p>
-              </div>
-              <div className="ml-auto flex items-center gap-2">
-                {panelActions('docs-upload')}
-              </div>
-            </div>
-
-            <form
-              onSubmit={handleAddLink}
-              hidden={collapsedPanels.has('docs-upload')}
-              className="p-4 bg-slate-50 rounded-2xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end"
-            >
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Document Title
-                </label>
-                <input
-                  type="text"
-                  value={linkTitle}
-                  onChange={(e) => setLinkTitle(e.target.value)}
-                  placeholder=""
-                  className="w-full text-xs px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Category
-                </label>
-                <select
-                  value={linkType}
-                  onChange={(e) => setLinkType(e.target.value as any)}
-                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium"
-                >
-                  {DOC_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Web Link (Google Drive / URL)
-                </label>
-                <input
-                  type="url"
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  placeholder=""
-                  className="w-full text-xs px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={!linkUrl.trim()}
-                className="flex items-center justify-center gap-1.5 text-xs font-bold text-slate-800 bg-white hover:bg-slate-100 border border-slate-300 px-4 py-2 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Attach Link</span>
-              </button>
-            </form>
-          </section>
-          </fieldset>
-
-          <fieldset disabled={!canEdit('docs-list')} className="contents">
-          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <span>Attached Documents ({project.docs.length})</span>
-              <span className="ml-auto flex items-center gap-2">
-                {panelActions('docs-list')}
-              </span>
+        <div className="space-y-4 sm:space-y-6">
+          <section className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-2xs space-y-4">
+            <h3 className="text-sm sm:text-base font-bold text-slate-900">
+              Attached Documents ({project.docs.length})
             </h3>
-
-            <div
-              className="overflow-x-auto rounded-2xl border border-slate-200"
-              hidden={collapsedPanels.has('docs-list')}
-            >
-              <table className="w-full text-xs text-left min-w-[700px]">
-                <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full text-xs text-left min-w-[500px]">
+                <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                   <tr>
-                    <th className="py-2.5 px-3.5">Document Title</th>
-                    <th className="py-2.5 px-3">Category</th>
-                    <th className="py-2.5 px-3">File / Link</th>
-                    <th className="py-2.5 px-3">Notes</th>
-                    <th className="py-2.5 px-3">Date Added</th>
-                    <th className="py-2.5 px-2 w-10 text-center"></th>
+                    <th className="py-2 px-3">Title</th>
+                    <th className="py-2 px-3">Category</th>
+                    <th className="py-2 px-3">Link</th>
+                    <th className="py-2 px-3 w-8"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {project.docs.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-400">
-                        <FileText className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                        <p className="font-bold">No documents attached</p>
-                        <p className="text-slate-400 text-[11px] mt-0.5">
-                          Attach an external document link using the form above.
-                        </p>
+                      <td colSpan={4} className="py-6 text-center text-slate-400">
+                        No documents attached.
                       </td>
                     </tr>
                   ) : (
-                    project.docs.map((d, idx) => (
-                      <tr key={d.id} className="hover:bg-slate-50/70">
-                        <td className="p-3 pl-3.5">
-                          <input
-                            type="text"
-                            value={d.title}
-                            onChange={(e) => {
-                              const copy = [...project.docs];
-                              copy[idx].title = e.target.value;
-                              update({ docs: copy });
-                            }}
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-bold text-slate-800"
-                          />
-                        </td>
-
-                        <td className="p-3">
-                          <select
-                            value={d.type}
-                            onChange={(e) => {
-                              const copy = [...project.docs];
-                              copy[idx].type = e.target.value as any;
-                              update({ docs: copy });
-                            }}
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
+                    project.docs.map((d) => (
+                      <tr key={d.id}>
+                        <td className="p-2.5 font-bold text-slate-800">{d.title}</td>
+                        <td className="p-2.5 text-slate-600">{d.type}</td>
+                        <td className="p-2.5">
+                          <a
+                            href={d.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-teal-700 hover:underline flex items-center gap-1 font-semibold"
                           >
-                            {DOC_TYPES.map((t) => (
-                              <option key={t} value={t}>
-                                {t}
-                              </option>
-                            ))}
-                          </select>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Open</span>
+                          </a>
                         </td>
-
-                        <td className="p-3">
-                          {d.kind === 'gdrive' ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="p-1 rounded-lg bg-amber-100 text-amber-900">
-                                <Cloud className="w-3.5 h-3.5" />
-                              </span>
-                              <a
-                                href={d.webViewLink || d.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="font-bold text-teal-700 hover:underline max-w-[200px] truncate"
-                              >
-                                {d.fileName || d.title || 'Open in Drive'}
-                              </a>
-                              {d.size && (
-                                <span className="text-[10px] text-slate-400">
-                                  ({(d.size / 1024).toFixed(0)} KB)
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <a
-                              href={d.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 font-bold text-teal-700 hover:underline max-w-[200px] truncate"
+                        <td className="p-2.5 text-center">
+                          {!isViewOnly && (
+                            <button
+                              onClick={() => {
+                                const copy = project.docs.filter((x) => x.id !== d.id);
+                                updateImmediately({ docs: copy });
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1"
                             >
-                              <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{d.url}</span>
-                            </a>
+                              ×
+                            </button>
                           )}
-                        </td>
-
-                        <td className="p-3">
-                          <input
-                            type="text"
-                            value={d.note}
-                            onChange={(e) => {
-                              const copy = [...project.docs];
-                              copy[idx].note = e.target.value;
-                            }}
-                            placeholder=""
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
-                          />
-                        </td>
-
-                        <td className="p-3 text-slate-500 tabular-nums whitespace-nowrap">
-                          {fmt(d.added)}
-                        </td>
-
-                        <td className="p-3 text-center">
-                          <button
-                            onClick={() => {
-                              const copy = project.docs.filter((x) => x.id !== d.id);
-                              update({ docs: copy });
-                            }}
-                            className="text-slate-400 hover:text-rose-600 p-1"
-                            title="Delete document"
-                          >
-                            ×
-                          </button>
                         </td>
                       </tr>
                     ))
@@ -3861,7 +1787,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </table>
             </div>
           </section>
-          </fieldset>
         </div>
       )}
 
