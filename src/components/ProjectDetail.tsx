@@ -1958,7 +1958,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   if (newChosen === f.id) {
                                     newChosen = newFs[newFs.length - 1].id;
                                   }
-                                  updateImmediately({
+                                  update({
                                     formulas: newFs,
                                     chosenFormula: newChosen,
                                   });
@@ -1977,7 +1977,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     isConfirmed: false,
                                     vatIncluded: false,
                                   };
-                                  updateImmediately({ formulas: [resetF], chosenFormula: resetF.id });
+                                  update({ formulas: [resetF], chosenFormula: resetF.id });
                                 }
                               }
                             }}
