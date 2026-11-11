@@ -1640,7 +1640,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </p>
             </div>
 
-            {/* ปุ่มเพิ่มสูตรใหม่: ปลดล็อกให้กดได้ทันทีโดยไม่ต้องผ่านโหมด Edit */}
             <div className="ml-auto flex items-center gap-2">
               {!isViewOnly && (
                 <button
@@ -1958,7 +1957,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   if (newChosen === f.id) {
                                     newChosen = newFs[newFs.length - 1].id;
                                   }
-                                  update({
+                                  updateImmediately({
                                     formulas: newFs,
                                     chosenFormula: newChosen,
                                   });
@@ -1977,7 +1976,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     isConfirmed: false,
                                     vatIncluded: false,
                                   };
-                                  update({ formulas: [resetF], chosenFormula: resetF.id });
+                                  updateImmediately({ formulas: [resetF], chosenFormula: resetF.id });
                                 }
                               }
                             }}
@@ -2013,6 +2012,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           />
                         </div>
 
+                        {/* กล่องอัปโหลดภาพ Formulation ปรับให้บันทึกทันทีด้วย updateImmediately */}
                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -2474,7 +2474,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </p>
             </div>
 
-            {/* ปุ่มเพิ่มบรรจุภัณฑ์ใหม่: ปลดล็อกให้กดได้ทันทีโดยไม่ต้องผ่านโหมด Edit */}
             <div className="ml-auto flex items-center gap-2">
               {!isViewOnly && (
                 <button
@@ -2532,10 +2531,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         : 'border-slate-200 bg-slate-50/60 opacity-80'
                     }`}
                   >
-                    {/* Header: ปุ่มคอนโทรลด้านซ้าย + ปุ่ม Edit & ปุ่มลบ X ขวาสุดสวยงาม */}
                     <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
                       <div className="flex items-center gap-3 flex-wrap">
-                        {/* Checkbox to select for cost calculation */}
                         <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 transition-colors">
                           <input
                             type="checkbox"
@@ -2576,7 +2573,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           ))}
                         </select>
 
-                        {/* Status in English */}
                         <div className="flex items-center gap-1.5">
                           <span className="text-[11px] font-bold text-slate-400">
                             Status:
@@ -2651,7 +2647,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         )}
                       </div>
 
-                      {/* ฝั่งขวาสุด: จัดวางปุ่ม Edit, ยุบขยาย และปุ่มลบ X สวยงามเป็นระเบียบ */}
                       <div className="ml-auto flex items-center gap-2">
                         {panelActions(packagePanelId)}
 
@@ -2677,7 +2672,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
                     <div hidden={collapsedPanels.has(packagePanelId)}>
                     <fieldset disabled={!canEdit(packagePanelId)} className="contents">
-                    {/* Basic specs: Name, Supplier, MOQ */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -2736,7 +2730,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                     </div>
 
-                    {/* EXPANDED SPECIFICATIONS & DETAILS FIELD */}
                     <div className="pt-2">
                       <label className="block text-xs font-bold text-slate-700 mb-1">
                         Detailed Specifications, Dimensions & Dieline (ช่องใส่สเปกและรายละเอียดแบบขยาย)
@@ -2755,7 +2748,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       />
                     </div>
 
-                    {/* Terms & Commercials: Plate Cost, Lead Time, Payment Terms, Warranty */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-50/80 rounded-2xl border border-slate-200 mt-2">
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -2937,6 +2929,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         )}
                       </div>
 
+                      {/* กล่องอัปโหลดภาพ Packaging ปรับให้บันทึกทันทีด้วย updateImmediately */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <label className="block text-xs font-bold text-slate-700">
