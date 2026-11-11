@@ -278,27 +278,9 @@ export default function App() {
   const pendingProjectDeletesRef = useRef<Set<string>>(new Set());
   const pendingHolidayWriteRef = useRef<Holiday[] | null>(null);
 
-  // Auth initialization
+// ซิงก์ข้อมูลจาก Google Sheets ทันทีที่เปิดหน้าเว็บ
   useEffect(() => {
-    const unsubscribe = initAuth(
-      (firebaseUser) => {
-        setUser(firebaseUser);
-        void UserAuthService.restoreSession(firebaseUser)
-          .then(setCurrentUser)
-          .catch((error: unknown) => {
-            console.error('Could not restore Firebase account session:', error);
-            void UserAuthService.logout();
-            setCurrentUser(null);
-          });
-      },
-      () => {
-        setUser(null);
-        UserAuthService.setCurrentSession(null);
-        setCurrentUser(null);
-      }
-    );
-
-    return () => unsubscribe();
+    triggerInitialSheetsSync('direct-apps-script');
   }, []);
 
   useEffect(() => {
@@ -390,11 +372,6 @@ export default function App() {
   }, [sharedProjectId]);
 
   const queueSave = (projectsToSave: Project[], deletedIds: string[] = []) => {
-    if (!user) {
-      showToast('Sign in with your username and password to save changes');
-      return;
-    }
-
     for (const project of projectsToSave) {
       pendingProjectWritesRef.current.set(project.id, project);
       pendingProjectDeletesRef.current.delete(project.id);
@@ -409,45 +386,39 @@ export default function App() {
       const upserts = [...pendingProjectWritesRef.current.values()];
       const deletes = [...pendingProjectDeletesRef.current];
       if (!upserts.length && !deletes.length) return;
+
       setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
-      const syncTimeout = window.setTimeout(() => {
-        setSyncState((prev) => ({
-          ...prev,
-          isSyncing: false,
-          isSynced: false,
-          error: 'Firebase has not confirmed the save. Changes remain queued.',
-        }));
-      }, FIREBASE_SYNC_TIMEOUT_MS);
+
       try {
-        await FirebaseDataService.saveProjectChanges(upserts, deletes);
-        for (const project of upserts) {
-          if (pendingProjectWritesRef.current.get(project.id) === project) {
-            pendingProjectWritesRef.current.delete(project.id);
-          }
-        }
-        for (const id of deletes) {
-          if (!pendingProjectWritesRef.current.has(id)) {
-            pendingProjectDeletesRef.current.delete(id);
-          }
-        }
+        // ดึงรายการโครงการทั้งหมดล่าสุดเพื่อเซฟลง Google Sheets
+        const currentProjects = projects;
+        await GoogleSheetsService.saveAllProjects(
+          'apps-script',
+          'google-apps-script',
+          currentProjects,
+          holidaysSet
+        );
+
+        pendingProjectWritesRef.current.clear();
+        pendingProjectDeletesRef.current.clear();
+
         setSyncState((prev) => ({
           ...prev,
           isSyncing: false,
           isSynced: true,
           lastSyncedAt: new Date(),
+          error: null,
         }));
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : 'Firebase save failed';
+          error instanceof Error ? error.message : 'Google Sheets save failed';
         setSyncState((prev) => ({
           ...prev,
           isSyncing: false,
           isSynced: false,
           error: message,
         }));
-        showToast(`Could not save to Firebase: ${message}`);
-      } finally {
-        clearTimeout(syncTimeout);
+        showToast(`Could not save to Google Sheets: ${message}`);
       }
     }, 700);
   };
@@ -464,7 +435,7 @@ export default function App() {
 
     window.addEventListener('online', retryPendingWrites);
     return () => window.removeEventListener('online', retryPendingWrites);
-  }, [user]);
+  }, []);
 
   // Toggle Cost Privacy
   const handleToggleCostPrivacy = () => {
@@ -484,15 +455,13 @@ export default function App() {
 
   const isViewOnly = Boolean(isUrlViewOnly || currentUser?.role === 'Viewer');
   const effectiveCostPrivacy = isViewOnly ? true : costPrivacy;
+
   const canWriteToFirebase = () => {
     if (isViewOnly) {
       showToast('Action not allowed in View-Only mode');
       return false;
     }
-    if (!user) {
-      showToast('Sign in with your username and password before editing');
-      return false;
-    }
+    // ตัดการเช็ก if (!user) ออก เพื่อให้บันทึกลง Google Sheets ได้ตลอดเวลา
     return true;
   };
 
