@@ -242,7 +242,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     );
   };
 
-  // บันทึกรูปภาพขึ้นชีตทันที
+  // Direct updater for immediate image uploads/deletions without manual edit mode
   const updateImmediately = (partial: Partial<Project>) => {
     if (isViewOnly) return;
     const base = draftProject || savedProject;
@@ -387,6 +387,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     setShowPasteArea(false);
   };
 
+  // Multiple Image Upload Helper พร้อมบีบอัดภาพให้อยู่ในโควตา Google Sheets อัตโนมัติ
   const handleMultipleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     currentImages: string[],
@@ -922,7 +923,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       <input
                         type="file"
                         multiple
-                        accept="image/*"
+                        accept="image/png, image/jpeg, image/jpg, image/webp"
+                        onClick={(e) => {
+                          (e.target as HTMLInputElement).value = '';
+                        }}
                         onChange={(e) =>
                           handleMultipleImageUpload(
                             e,
@@ -2018,7 +2022,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 <input
                                   type="file"
                                   multiple
-                                  accept="image/*"
+                                  accept="image/png, image/jpeg, image/jpg, image/webp"
+                                  onClick={(e) => {
+                                    (e.target as HTMLInputElement).value = '';
+                                  }}
                                   onChange={(e) =>
                                     handleMultipleImageUpload(
                                       e,
@@ -2915,7 +2922,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               <input
                                 type="file"
                                 multiple
-                                accept="image/*"
+                                accept="image/png, image/jpeg, image/jpg, image/webp"
+                                onClick={(e) => {
+                                  (e.target as HTMLInputElement).value = '';
+                                }}
                                 onChange={(e) =>
                                   handleMultipleImageUpload(
                                     e,
