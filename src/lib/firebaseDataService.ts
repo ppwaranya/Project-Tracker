@@ -106,6 +106,14 @@ export class FirebaseDataService {
     localStorage.setItem(CACHE_KEY_HOLIDAYS, JSON.stringify(holidays));
   }
 
+  static cacheProjects(projects: Project[]): void {
+    localStorage.setItem(CACHE_KEY_PROJECTS, JSON.stringify(projects));
+  }
+
+  static cacheHolidays(holidays: Holiday[]): void {
+    localStorage.setItem(CACHE_KEY_HOLIDAYS, JSON.stringify(holidays));
+  }
+
   static getLocalProjects(): Project[] | null {
     try {
       const data = localStorage.getItem(CACHE_KEY_PROJECTS);

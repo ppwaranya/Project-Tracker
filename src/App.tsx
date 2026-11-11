@@ -275,6 +275,7 @@ export default function App() {
   const saveTimerRef = useRef<any>(null);
   const pendingProjectWritesRef = useRef<Map<string, Project>>(new Map());
   const pendingProjectDeletesRef = useRef<Set<string>>(new Set());
+  const pendingHolidayWriteRef = useRef<Holiday[] | null>(null);
 
   // Auth initialization
   useEffect(() => {
@@ -318,14 +319,31 @@ export default function App() {
 
     const unsubscribeProjects = FirebaseDataService.subscribeToProjects(
       (remoteProjects) => {
-        setProjects(remoteProjects);
+        const mergedProjects = new Map(
+          remoteProjects.map((project) => [project.id, project])
+        );
+        for (const id of pendingProjectDeletesRef.current) {
+          mergedProjects.delete(id);
+        }
+        for (const [id, project] of pendingProjectWritesRef.current) {
+          mergedProjects.set(id, project);
+        }
+        const visibleProjects = [...mergedProjects.values()].sort(
+          (a, b) => b.createdAt - a.createdAt
+        );
+        FirebaseDataService.cacheProjects(visibleProjects);
+        setProjects(visibleProjects);
         markConnected();
       },
       handleError
     );
     const unsubscribeHolidays = FirebaseDataService.subscribeToHolidays(
       (remoteHolidays) => {
-        setHolidays(remoteHolidays.length ? remoteHolidays : DEFAULT_HOLIDAYS);
+        const visibleHolidays =
+          pendingHolidayWriteRef.current ??
+          (remoteHolidays.length ? remoteHolidays : DEFAULT_HOLIDAYS);
+        FirebaseDataService.cacheHolidays(visibleHolidays);
+        setHolidays(visibleHolidays);
         markConnected();
       },
       handleError
@@ -384,11 +402,20 @@ export default function App() {
     saveTimerRef.current = setTimeout(async () => {
       const upserts = [...pendingProjectWritesRef.current.values()];
       const deletes = [...pendingProjectDeletesRef.current];
-      pendingProjectWritesRef.current.clear();
-      pendingProjectDeletesRef.current.clear();
+      if (!upserts.length && !deletes.length) return;
       setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
       try {
         await FirebaseDataService.saveProjectChanges(upserts, deletes);
+        for (const project of upserts) {
+          if (pendingProjectWritesRef.current.get(project.id) === project) {
+            pendingProjectWritesRef.current.delete(project.id);
+          }
+        }
+        for (const id of deletes) {
+          if (!pendingProjectWritesRef.current.has(id)) {
+            pendingProjectDeletesRef.current.delete(id);
+          }
+        }
         setSyncState((prev) => ({
           ...prev,
           isSyncing: false,
@@ -396,10 +423,6 @@ export default function App() {
           lastSyncedAt: new Date(),
         }));
       } catch (error) {
-        for (const project of upserts) {
-          pendingProjectWritesRef.current.set(project.id, project);
-        }
-        for (const id of deletes) pendingProjectDeletesRef.current.add(id);
         const message =
           error instanceof Error ? error.message : 'Firebase save failed';
         setSyncState((prev) => ({
@@ -513,10 +536,14 @@ export default function App() {
 
   const handleSaveHolidays = async (newHolidays: Holiday[]) => {
     if (!canWriteToFirebase()) return;
+    pendingHolidayWriteRef.current = newHolidays;
     setHolidays(newHolidays);
     setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
     try {
       await FirebaseDataService.saveHolidays(newHolidays);
+      if (pendingHolidayWriteRef.current === newHolidays) {
+        pendingHolidayWriteRef.current = null;
+      }
       setSyncState((prev) => ({
         ...prev,
         isSyncing: false,
