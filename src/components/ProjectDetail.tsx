@@ -84,7 +84,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   onDeleteProject,
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
-  const [editingSection, setEditingSection] = useState<TabKey | null>(null);
+  const [editingPanel, setEditingPanel] = useState<string | null>(null);
   const [draftProject, setDraftProject] = useState<Project | null>(null);
   const [collapsedPanels, setCollapsedPanels] = useState<Set<string>>(new Set());
   const [comparisonFormulaIds, setComparisonFormulaIds] = useState<Set<string>>(new Set());
@@ -116,8 +116,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       : { amount, unit: '' };
   };
 
-  const canEdit = (section: TabKey) =>
-    !isViewOnly && editingSection === section;
+  const canEdit = (panelId: string) =>
+    !isViewOnly && editingPanel === panelId;
 
   const panelToggle = (panelId: string) => {
     const isCollapsed = collapsedPanels.has(panelId);
@@ -155,89 +155,79 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     );
   };
 
-  const beginEdit = (section: TabKey) => {
-    if (isViewOnly || editingSection !== null) return;
+  const beginEdit = (panelId: string) => {
+    if (isViewOnly || editingPanel !== null) return;
     setDraftProject(JSON.parse(JSON.stringify(savedProject)) as Project);
-    setEditingSection(section);
+    setEditingPanel(panelId);
   };
 
-  const panelEditButton = (section: TabKey) => {
-    if (isViewOnly) return null;
-    const isDisabled = editingSection !== null;
+  const runPanelAction = (
+    label: string,
+    onAction: () => void,
+    className: string,
+    disabled = false
+  ) => (
+    <div
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled}
+      onClick={() => {
+        if (!disabled) onAction();
+      }}
+      onKeyDown={(event) => {
+        if (!disabled && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          onAction();
+        }
+      }}
+      className={`${className} ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+    >
+      {label}
+    </div>
+  );
 
-    return (
-      <div
-        role="button"
-        tabIndex={isDisabled ? -1 : 0}
-        aria-disabled={isDisabled}
-        onClick={() => beginEdit(section)}
-        onKeyDown={(event) => {
-          if (!isDisabled && (event.key === 'Enter' || event.key === ' ')) {
-            event.preventDefault();
-            beginEdit(section);
-          }
-        }}
-        className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold ${
-          isDisabled
-            ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
-            : 'cursor-pointer border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-        }`}
-      >
-        <Pencil className="h-3.5 w-3.5" />
-        <span>Edit</span>
-      </div>
-    );
-  };
-
-  const saveEdits = () => {
-    if (!editingSection || !draftProject || isViewOnly) return;
+  const savePanelEdits = () => {
+    if (!editingPanel || !draftProject || isViewOnly) return;
     onUpdateProject({
       ...draftProject,
       updatedAt: Date.now(),
       rev: (savedProject.rev || 0) + 1,
     });
     setDraftProject(null);
-    setEditingSection(null);
+    setEditingPanel(null);
   };
 
-  const cancelEdits = () => {
+  const cancelPanelEdits = () => {
     setDraftProject(null);
-    setEditingSection(null);
+    setEditingPanel(null);
   };
 
-  const tabEditActions = !isViewOnly ? (
-    <div className="flex items-center justify-end gap-2">
-      {editingSection === null ? (
-        <button
-          type="button"
-          onClick={() => beginEdit(activeTab)}
-          className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-700"
-        >
-          Edit
-        </button>
-      ) : (
+  const panelActions = (panelId: string, collapsible = true) => (
+    <div className="ml-auto flex shrink-0 items-center gap-2">
+      {!isViewOnly && (editingPanel === panelId ? (
         <>
-          <span className="text-xs font-semibold text-amber-700">
-            Editing: {editingSection}
-          </span>
-          <button
-            type="button"
-            onClick={saveEdits}
-            className="px-4 py-2 rounded-xl bg-[#ccf835] text-slate-950 text-xs font-extrabold hover:bg-[#bced28]"
-          >
-            Save
-          </button>
-          <button
-            type="button"
-            onClick={cancelEdits}
-            className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50"
-          >
-            Cancel
-          </button>
+          {runPanelAction(
+            'Save',
+            savePanelEdits,
+            'inline-flex h-8 items-center rounded-lg bg-[#ccf835] px-3 text-xs font-extrabold text-slate-950 hover:bg-[#bced28]'
+          )}
+          {runPanelAction(
+            'Cancel',
+            cancelPanelEdits,
+            'inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50'
+          )}
         </>
-      )}
+      ) : (
+        runPanelAction(
+          'Edit',
+          () => beginEdit(panelId),
+          'inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50',
+          editingPanel !== null
+        )
+      ))}
+      {collapsible && panelToggle(panelId)}
     </div>
-  ) : null;
+  );
 
   // Calculations
   const cs = compute(project, holidaysSet);
@@ -245,7 +235,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const s = summ(project, cs, co, holidaysSet);
 
   const update = (partial: Partial<Project>) => {
-    if (!editingSection || isViewOnly) return;
+    if (!editingPanel || isViewOnly) return;
     setDraftProject((current) =>
       current
         ? {
@@ -472,7 +462,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           {!isSharedProjectView && (
             <button
               onClick={onBack}
-              disabled={editingSection !== null}
+              disabled={editingPanel !== null}
               className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-teal-700 transition-colors cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -496,7 +486,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   el.style.height = `${el.scrollHeight}px`;
                 }
               }}
-              disabled={!canEdit('overview')}
+              disabled={!canEdit('project-info')}
               placeholder=""
               className="w-full text-xl sm:text-2xl font-extrabold text-slate-900 border-b border-transparent hover:border-slate-300 focus:border-amber-400 focus:outline-hidden bg-transparent px-1 py-1 rounded-sm resize-none overflow-hidden leading-snug whitespace-normal break-words transition-colors"
             />
@@ -510,7 +500,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </span>
               <input
                 type="text"
-                disabled={!canEdit('overview')}
+                disabled={!canEdit('project-info')}
                 value={project.lotNo || ''}
                 onChange={(e) => update({ lotNo: e.target.value })}
                 placeholder=""
@@ -519,7 +509,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
 
             <select
-              disabled={!canEdit('overview')}
+              disabled={!canEdit('project-info')}
               value={project.category === 'อาหารเสริม' ? 'Dietary Supplement' : project.category === 'สกินแคร์' ? 'Skincare' : project.category}
               onChange={(e) => update({ category: e.target.value as any })}
               className="text-xs px-3 py-1.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-700 shadow-2xs cursor-pointer disabled:opacity-70"
@@ -529,7 +519,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </select>
 
             <select
-              disabled={!canEdit('overview')}
+              disabled={!canEdit('project-info')}
               value={project.status === 'กำลังดำเนินการ' ? 'In Progress' : project.status === 'เสร็จสิ้น' ? 'Completed' : project.status === 'พักไว้' ? 'On Hold' : project.status === 'ยกเลิก' ? 'Cancelled' : project.status}
               onChange={(e) => update({ status: e.target.value as any })}
               className={`text-xs px-3 py-1.5 rounded-xl border font-bold shadow-2xs cursor-pointer disabled:opacity-70 ${
@@ -553,6 +543,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-shrink-0 self-end md:self-center">
+          {!isViewOnly && panelActions('project-info', false)}
           {/* Share View-Only Link Button */}
           <button
             onClick={() => {
@@ -577,7 +568,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <>
               <button
                 onClick={handleDuplicate}
-                disabled={editingSection !== null}
+                disabled={editingPanel !== null}
                 className="flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer shadow-2xs"
               >
                 <Copy className="w-3.5 h-3.5 text-slate-500" />
@@ -586,7 +577,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
               <button
                 onClick={handleDelete}
-                disabled={editingSection !== null}
+                disabled={editingPanel !== null}
                 className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-xl border transition-all cursor-pointer shadow-2xs ${
                   armDelete
                     ? 'bg-rose-600 text-white border-rose-600 animate-pulse'
@@ -688,7 +679,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           ].map((t) => (
             <button
               key={t.key}
-              disabled={editingSection !== null}
+              disabled={editingPanel !== null}
               onClick={() => setActiveTab(t.key as TabKey)}
               className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
                 activeTab === t.key
@@ -705,18 +696,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          {tabEditActions}
-          <fieldset disabled={!canEdit('overview')} className="contents">
           {/* Section 1: Specifications & FDA Licensing */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
+            <fieldset disabled={!canEdit('overview-specifications')} className="contents">
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2">
               <h3 className="flex min-w-0 items-center gap-2 text-sm font-bold text-slate-900">
                 <Info className="h-4 w-4 shrink-0 text-teal-600" />
                 <span>Project Specifications & Regulatory Registration</span>
               </h3>
               <div className="ml-auto flex shrink-0 items-center gap-2">
-                {panelEditButton('overview')}
-                {panelToggle('overview-specifications')}
+                {panelActions('overview-specifications')}
               </div>
             </div>
 
@@ -843,10 +832,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 />
               </div>
             </div>
+            </fieldset>
           </section>
 
           {/* Section 2: Product Reference & Benchmark (COMPACT & MULTI-IMAGE SUPPORT) */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
+            <fieldset disabled={!canEdit('overview-benchmark')} className="contents">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Award className="w-4 h-4 text-amber-500" />
@@ -856,8 +847,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 Benchmark sensory, texture, taste, packaging & pricing against market competitors
               </span>
               <div className="ml-auto flex shrink-0 items-center gap-2">
-                {panelEditButton('overview')}
-                {panelToggle('overview-benchmark')}
+                {panelActions('overview-benchmark')}
               </div>
             </div>
 
@@ -1027,15 +1017,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </div>
               </div>
             </div>
+            </fieldset>
           </section>
 
           {/* Section 3: USP & Marketing Claims */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-3">
+            <fieldset disabled={!canEdit('overview-usp')} className="contents">
             <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
               <Sparkles className="h-4 w-4 shrink-0 text-amber-500" />
               <span className="min-w-0 flex-1">Unique Selling Proposition (USP) & Marketing Claims</span>
-              {panelEditButton('overview')}
-              {panelToggle('overview-usp')}
+              {panelActions('overview-usp')}
             </h3>
             <textarea
               hidden={collapsedPanels.has('overview-usp')}
@@ -1045,10 +1036,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               placeholder=""
               className="w-full text-xs sm:text-sm p-3.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
             />
+            </fieldset>
           </section>
 
           {/* Section 4: Ingredients List */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
+            <fieldset disabled={!canEdit('overview-ingredients')} className="contents">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <h3 className="text-sm font-bold text-slate-900">
@@ -1077,8 +1070,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Ingredient</span>
                 </button>
-                {panelEditButton('overview')}
-                {panelToggle('overview-ingredients')}
+                {panelActions('overview-ingredients')}
               </div>
             </div>
 
@@ -1218,10 +1210,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </tbody>
               </table>
             </div>
+            </fieldset>
           </section>
 
           {/* Section 5: Laboratory Analysis & QA */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
+            <fieldset disabled={!canEdit('overview-tests')} className="contents">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <h3 className="text-sm font-bold text-slate-900">
@@ -1251,8 +1245,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Lab Test</span>
                 </button>
-                {panelEditButton('overview')}
-                {panelToggle('overview-tests')}
+                {panelActions('overview-tests')}
               </div>
             </div>
 
@@ -1413,10 +1406,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </button>
               ))}
             </div>
+            </fieldset>
           </section>
 
           {/* Section 6: Regulatory & Permits */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
+            <fieldset disabled={!canEdit('overview-permits')} className="contents">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -1448,8 +1443,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Permit</span>
                 </button>
-                {panelEditButton('overview')}
-                {panelToggle('overview-permits')}
+                {panelActions('overview-permits')}
               </div>
             </div>
 
@@ -1626,15 +1620,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </button>
               ))}
             </div>
+            </fieldset>
           </section>
-          </fieldset>
         </div>
       )}
 
       {/* TAB 2: FORMULATION */}
       {activeTab === 'formula' && (
         <div className="space-y-6">
-          {tabEditActions}
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h3 className="text-base font-bold text-slate-900 font-heading">
@@ -1651,8 +1644,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </p>
             </div>
 
+            <div className="ml-auto flex items-center gap-2">
             <button
-              disabled={!canEdit('formula')}
+              disabled={!canEdit('formula-new')}
               onClick={() => {
                 const last = project.formulas[project.formulas.length - 1];
                 const newF: Formula = {
@@ -1678,6 +1672,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>Create New Formula</span>
             </button>
+            {panelActions('formula-new', false)}
+            </div>
           </div>
 
           <section className="bg-white p-4 rounded-2xl border border-slate-200 space-y-3">
@@ -1698,7 +1694,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 >
                   {showFormulaComparison ? 'Hide Comparison' : 'Compare Selected'}
                 </button>
-                {panelEditButton('formula')}
                 {panelToggle('formula-comparison')}
               </div>
             </div>
@@ -1837,11 +1832,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         Compare
                       </label>
                       <strong className="flex-1 text-xs">{f.ver} {f.code || ''}</strong>
-                      {panelEditButton('formula')}
-                      {panelToggle(`formula-${f.id}`)}
+                      {panelActions(`formula-${f.id}`)}
                     </div>
                     <div hidden={collapsedPanels.has(`formula-${f.id}`)}>
-                    <fieldset disabled={!canEdit('formula')} className="contents">
+                    <fieldset disabled={!canEdit(`formula-${f.id}`)} className="contents">
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
                       <div className="flex items-center gap-2.5 flex-wrap">
@@ -2480,8 +2474,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* TAB 3: PACKAGING */}
       {activeTab === 'packaging' && (
         <div className="space-y-6">
-          {tabEditActions}
-          <fieldset disabled={!canEdit('packaging')} className="contents">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h3 className="text-base font-bold text-slate-900 font-heading">
@@ -2493,7 +2485,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
 
             {/* Add Package button */}
+            <div className="ml-auto flex items-center gap-2">
             <button
+              disabled={!canEdit('packaging-new')}
               onClick={() => {
                 const newItem: PackagingItem = {
                   id: uid(),
@@ -2520,6 +2514,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>Add Package</span>
             </button>
+            {panelActions('packaging-new', false)}
+            </div>
           </div>
 
           <div className="space-y-5">
@@ -2537,14 +2533,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   Number(project.qty) < Number(it.moq);
 
                 return (
-                  <div
-                    key={it.id}
-                    className={`p-6 rounded-3xl border bg-white shadow-2xs space-y-4 transition-all ${
-                      it.selectedForCost !== false
-                        ? 'border-slate-200'
-                        : 'border-slate-200 bg-slate-50/60 opacity-80'
-                    }`}
-                  >
+                  <fieldset key={it.id} disabled={!canEdit(packagePanelId)} className="contents">
+                    <div
+                      className={`p-6 rounded-3xl border bg-white shadow-2xs space-y-4 transition-all ${
+                        it.selectedForCost !== false
+                          ? 'border-slate-200'
+                          : 'border-slate-200 bg-slate-50/60 opacity-80'
+                      }`}
+                    >
                     {/* Header: Package Selection + Type + English Status + Delete */}
                     <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
                       <div className="flex items-center gap-3 flex-wrap">
@@ -2672,8 +2668,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       >
                         ×
                       </button>
-                      {panelEditButton('packaging')}
-                      {panelToggle(packagePanelId)}
+                      {panelActions(packagePanelId)}
                     </div>
 
                     <div hidden={collapsedPanels.has(packagePanelId)}>
@@ -3038,12 +3033,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                     </div>
                     </div>
-                  </div>
+                    </div>
+                  </fieldset>
                 );
               })
             )}
           </div>
-          </fieldset>
         </div>
       )}
 
@@ -3063,8 +3058,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
         ) : (
           <div className="space-y-6">
-            {tabEditActions}
-            <fieldset disabled={!canEdit('cost')} className="contents">
             <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
               <h3 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2 font-heading">
                 <span>Cost & Budget Analysis</span>
@@ -3075,7 +3068,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   </span>
                 )}
                 <span className="ml-auto flex items-center gap-2">
-                  {panelEditButton('cost')}
                   {panelToggle('cost-summary')}
                 </span>
               </h3>
@@ -3090,6 +3082,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </section>
 
           {/* Other / Operating Expenses & Custom Allocation Units */}
+          <fieldset disabled={!canEdit('cost-other')} className="contents">
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
@@ -3124,8 +3117,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Expense Item</span>
                 </button>
-                {panelEditButton('cost')}
-                {panelToggle('cost-other')}
+                {panelActions('cost-other')}
               </div>
             </div>
 
@@ -3317,13 +3309,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* TAB 5: TIMELINE & GANTT */}
       {activeTab === 'timeline' && (
         <div className="space-y-6">
-          {tabEditActions}
           {/* Timeline Summary Metrics */}
           {!isViewOnly && (
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-3">
             <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 font-heading">
               <span className="min-w-0 flex-1">Timeline Milestones & Delivery Schedule</span>
-              {panelEditButton('timeline')}
               {panelToggle('timeline-summary')}
             </h3>
 
@@ -3382,7 +3372,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 font-heading">
               <span className="min-w-0 flex-1">Weekly Gantt Chart</span>
-              {panelEditButton('timeline')}
               {panelToggle('timeline-gantt')}
             </h3>
             <div hidden={collapsedPanels.has('timeline-gantt')}>
@@ -3392,7 +3381,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
           {/* Phased Task Schedule */}
           {!isViewOnly && (
-          <fieldset disabled={!canEdit('timeline')} className="contents">
+          <fieldset disabled={!canEdit('timeline-schedule')} className="contents">
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -3404,8 +3393,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </p>
               </div>
               <div className="ml-auto flex items-center gap-2">
-                {panelEditButton('timeline')}
-                {panelToggle('timeline-schedule')}
+                {panelActions('timeline-schedule')}
               </div>
             </div>
 
@@ -3658,8 +3646,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* TAB 6: DOCUMENTS */}
       {activeTab === 'docs' && (
         <div className="space-y-6">
-          {tabEditActions}
-          <fieldset disabled={!canEdit('docs')} className="contents">
+          <fieldset disabled={!canEdit('docs-upload')} className="contents">
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
@@ -3671,8 +3658,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </p>
               </div>
               <div className="ml-auto flex items-center gap-2">
-                {panelEditButton('docs')}
-                {panelToggle('docs-upload')}
+                {panelActions('docs-upload')}
               </div>
             </div>
 
@@ -3735,14 +3721,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </button>
             </form>
           </section>
+          </fieldset>
 
           {/* Documents Table */}
+          <fieldset disabled={!canEdit('docs-list')} className="contents">
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <span>Attached Documents ({project.docs.length})</span>
               <span className="ml-auto flex items-center gap-2">
-                {panelEditButton('docs')}
-                {panelToggle('docs-list')}
+                {panelActions('docs-list')}
               </span>
             </h3>
 
