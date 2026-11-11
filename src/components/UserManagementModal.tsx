@@ -27,13 +27,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [newRole, setNewRole] = useState<UserRole>('Editor');
   const [formError, setFormError] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
-  const [isSyncingAccounts, setIsSyncingAccounts] = useState(false);
-  const [hasSyncedAccounts, setHasSyncedAccounts] = useState(() =>
-    UserAuthService.getUsers().some(
-      (user) =>
-        !user.id.startsWith('usr_') && !user.id.startsWith('user_')
-    )
-  );
 
   // Reset password state for existing user
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -41,24 +34,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
   const refreshUsers = () => {
     setUsers(UserAuthService.getUsers());
-  };
-
-  const handleSyncAccounts = async () => {
-    setIsSyncingAccounts(true);
-    setFormError('');
-    try {
-      const syncedUsers = await UserAuthService.syncAccounts();
-      setUsers(syncedUsers);
-      setHasSyncedAccounts(true);
-      setFormError('Accounts were synced to Firebase successfully.');
-    } catch (error) {
-      console.error('Could not sync legacy accounts:', error);
-      setFormError(
-        error instanceof Error ? error.message : 'Account sync failed.'
-      );
-    } finally {
-      setIsSyncingAccounts(false);
-    }
   };
 
   const handleAddUser = async (e: React.FormEvent) => {
@@ -69,12 +44,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       setFormError('Please provide both username and password.');
       return;
     }
-    if (!hasSyncedAccounts) {
-      setFormError('Sync accounts with Firebase before managing users.');
-      return;
-    }
     if (newPassword.length < 6) {
-      setFormError('Firebase passwords must be at least 6 characters.');
+      setFormError('Passwords must be at least 6 characters.');
       return;
     }
 
@@ -92,7 +63,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       setNewRole('Editor');
       setShowAddForm(false);
     } catch (error) {
-      console.error('Could not create Firebase account:', error);
+      console.error('Could not create account:', error);
       setFormError(
         error instanceof Error ? error.message : 'Failed to create user.'
       );
@@ -104,7 +75,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       await UserAuthService.setFirebaseUserDisabled(user.id, false);
       refreshUsers();
     } catch (error) {
-      console.error('Could not unlock Firebase account:', error);
+      console.error('Could not unlock account:', error);
       setFormError(error instanceof Error ? error.message : 'Could not unlock account.');
     }
   };
@@ -119,14 +90,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
         current.map((item) => (item.id === updated.id ? updated : item))
       );
     } catch (error) {
-      console.error('Could not update Firebase account role:', error);
+      console.error('Could not update account role:', error);
       setFormError(error instanceof Error ? error.message : 'Could not update role.');
     }
   };
 
   const handleResetPassword = async (userId: string) => {
     if (resetPasswordVal.length < 6) {
-      setFormError('Firebase passwords must be at least 6 characters.');
+      setFormError('Passwords must be at least 6 characters.');
       return;
     }
     try {
@@ -141,7 +112,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       setResetPasswordVal('');
       setFormError('');
     } catch (error) {
-      console.error('Could not reset Firebase account password:', error);
+      console.error('Could not reset password:', error);
       setFormError(
         error instanceof Error ? error.message : 'Could not reset password.'
       );
@@ -154,7 +125,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
         await UserAuthService.setFirebaseUserDisabled(userId, true);
         refreshUsers();
       } catch (error) {
-        console.error('Could not disable Firebase account:', error);
+        console.error('Could not disable account:', error);
         setFormError(
           error instanceof Error ? error.message : 'Could not disable account.'
         );
@@ -191,7 +162,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -219,36 +190,19 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
         {/* Content list */}
         <div className="overflow-y-auto flex-1 space-y-4 pr-1">
-          {/* Add User Button & Form */}
+          {/* Header Bar: Active Users Counter & Add User Button */}
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-bold text-slate-700">
               Active Users ({users.length})
             </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleSyncAccounts}
-                disabled={isSyncingAccounts}
-                className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                {isSyncingAccounts ? 'Syncing...' : 'Sync Accounts'}
-              </button>
-              <button
-                onClick={() => setShowAddForm(!showAddForm)}
-                disabled={!hasSyncedAccounts}
-                className="flex items-center gap-1 text-xs font-extrabold px-3 py-1.5 rounded-xl bg-[#ccf835] hover:bg-[#bced28] text-slate-950 transition-colors cursor-pointer shadow-2xs disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>{showAddForm ? 'Cancel' : 'Add User'}</span>
-              </button>
-            </div>
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="flex items-center gap-1 text-xs font-extrabold px-3 py-1.5 rounded-xl bg-[#ccf835] hover:bg-[#bced28] text-slate-950 transition-colors cursor-pointer shadow-2xs"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>{showAddForm ? 'Cancel' : 'Add User'}</span>
+            </button>
           </div>
-
-          {!hasSyncedAccounts && (
-            <p className="text-xs text-slate-500">
-              Sync accounts once to move existing usernames into Firebase before
-              adding or managing accounts.
-            </p>
-          )}
 
           {formError && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
@@ -262,11 +216,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 animate-in fade-in duration-100"
             >
               <h4 className="text-xs font-bold text-slate-800">New User Credentials</h4>
-              {formError && (
-                <div className="p-2.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl">
-                  {formError}
-                </div>
-              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -278,7 +227,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     required
                     value={newUsername}
                     onChange={(e) => setNewUsername(e.target.value)}
-                    placeholder=""
+                    placeholder="e.g. john"
                     className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-400 font-medium"
                   />
                 </div>
@@ -292,7 +241,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     required
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder=""
+                    placeholder="Min. 6 chars"
                     className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-400 font-medium"
                   />
                 </div>
@@ -305,7 +254,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     type="text"
                     value={newDisplayName}
                     onChange={(e) => setNewDisplayName(e.target.value)}
-                    placeholder=""
+                    placeholder="e.g. John Doe"
                     className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-400"
                   />
                 </div>
@@ -377,7 +326,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                         ) : (
                           <select
                             value={u.role}
-                            disabled={!hasSyncedAccounts}
                             onChange={(e) =>
                               handleRoleChange(u, e.target.value as UserRole)
                             }
@@ -408,8 +356,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           {u.isLocked && (
                             <button
                               onClick={() => handleUnlockUser(u)}
-                              disabled={!hasSyncedAccounts}
-                              className="flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-teal-50 text-teal-800 hover:bg-teal-100 transition-colors"
+                              className="flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-teal-50 text-teal-800 hover:bg-teal-100 transition-colors cursor-pointer"
                               title="Unlock account"
                             >
                               <Unlock className="w-3 h-3" />
@@ -423,12 +370,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                 type="password"
                                 value={resetPasswordVal}
                                 onChange={(e) => setResetPasswordVal(e.target.value)}
-                                placeholder=""
-                                className="w-24 text-[11px] px-2 py-1 rounded-lg border border-slate-300 bg-white"
+                                placeholder="New password"
+                                className="w-28 text-[11px] px-2 py-1 rounded-lg border border-slate-300 bg-white"
                               />
                               <button
                                 onClick={() => handleResetPassword(u.id)}
-                                className="text-[11px] font-bold px-2 py-1 rounded-lg bg-emerald-600 text-white"
+                                className="text-[11px] font-bold px-2 py-1 rounded-lg bg-emerald-600 text-white cursor-pointer"
                               >
                                 Save
                               </button>
@@ -437,7 +384,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                   setEditingUserId(null);
                                   setResetPasswordVal('');
                                 }}
-                                className="text-[11px] p-1 text-slate-400 hover:text-slate-600"
+                                className="text-[11px] p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
                               >
                                 ×
                               </button>
@@ -448,7 +395,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                 setEditingUserId(u.id);
                                 setResetPasswordVal('');
                               }}
-                              disabled={!hasSyncedAccounts}
                               className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer"
                               title="Reset password"
                             >
@@ -459,8 +405,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           {!isDefaultAdmin && (
                             <button
                               onClick={() => handleDeleteUser(u.id)}
-                              disabled={!hasSyncedAccounts}
-                              className="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition-colors"
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
                               title="Delete user"
                             >
                               <Trash2 className="w-3.5 h-3.5" />

@@ -10,7 +10,7 @@ import {
   Menu,
   X,
 } from 'lucide-react';
-import { SyncState } from '../lib/firebaseDataService';
+import { SyncState } from '../lib/googleSheetsService';
 
 interface HeaderProps {
   currentUser: AppUser | null;
@@ -112,17 +112,17 @@ export const Header: React.FC<HeaderProps> = ({
                 href="#all"
                 className="flex items-center gap-2.5 sm:gap-3 text-slate-900 group flex-shrink-0"
               >
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl overflow-hidden flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform flex-shrink-0 bg-white border border-slate-200 p-0.5">
-                <img
-                  src="/assets/aistudio/image_5173417e.png"
-                  alt="Project Tracker Logo"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-              <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 group-hover:text-slate-700 transition-colors font-heading truncate">
-                Project Tracker
-              </h1>
-            </a>
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl overflow-hidden flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform flex-shrink-0 bg-white border border-slate-200 p-0.5">
+                  <img
+                    src="/assets/aistudio/image_5173417e.png"
+                    alt="Project Tracker Logo"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 group-hover:text-slate-700 transition-colors font-heading truncate">
+                  Project Tracker
+                </h1>
+              </a>
             )}
           </div>
 
@@ -201,13 +201,13 @@ export const Header: React.FC<HeaderProps> = ({
 
                     <div
                       role="status"
-                      title={syncState.error || 'Live project data stored in Firebase'}
+                      title={syncState.error || 'Live project data stored in Data Sheets'}
                       className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700"
                     >
                       <RefreshCw
                         className={`h-4 w-4 ${
                           syncState.isSyncing
-                            ? 'animate-spin'
+                            ? 'animate-spin text-amber-500'
                             : syncState.error
                               ? 'text-amber-600'
                             : syncState.isSynced
@@ -216,14 +216,13 @@ export const Header: React.FC<HeaderProps> = ({
                         }`}
                       />
                       {syncState.isSyncing
-                        ? 'Saving to Firebase...'
+                        ? 'Saving to Data Sheets...'
                         : syncState.error
                           ? 'Sync delayed'
                         : syncState.isSynced
-                          ? 'Firebase Live'
-                          : 'Firebase'}
+                          ? 'Data Sheets Live'
+                          : 'Data Sheets'}
                     </div>
-
                   </>
                 )}
 
