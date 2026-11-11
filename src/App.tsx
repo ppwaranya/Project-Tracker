@@ -307,12 +307,65 @@ export default function App() {
     }
   };
 
-  // ซิงก์ข้อมูลทันทีเมื่อเปิดหน้าเว็บ
+  // บังคับดันข้อมูลจากเครื่องนี้ขึ้น Google Sheets ทันที (Force Sync)
+  const forcePushToGoogleSheets = async () => {
+    setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
+    try {
+      await GoogleSheetsService.saveAllProjects(
+        'apps-script',
+        'google-apps-script',
+        projects,
+        holidaysSet
+      );
+      await GoogleSheetsService.saveHolidays(
+        'apps-script',
+        'google-apps-script',
+        holidays
+      );
+      setSyncState((prev) => ({
+        ...prev,
+        isSynced: true,
+        isSyncing: false,
+        lastSyncedAt: new Date(),
+        error: null,
+      }));
+      showToast('ส่งข้อมูลทั้งหมดขึ้น Google Sheets สำเร็จแล้ว!');
+    } catch (error: any) {
+      const message = error instanceof Error ? error.message : 'Push failed';
+      setSyncState((prev) => ({
+        ...prev,
+        isSyncing: false,
+        isSynced: false,
+        error: message,
+      }));
+      showToast(`ไม่สามารถบันทึกลง Google Sheets: ${message}`);
+    }
+  };
+
+  // เมื่อเปิดเว็บ ตรวจสอบว่าในชีตมีข้อมูลหรือยัง ถ้ายังว่าง ให้ดันข้อมูลที่มีอยู่ขึ้นทันที
   useEffect(() => {
-    syncWithGoogleSheets();
+    const initSync = async () => {
+      try {
+        const remote = await GoogleSheetsService.loadProjects();
+        if (!remote || remote.length === 0) {
+          // หากบน Google Sheets ยังว่างเปล่า ให้ส่งโปรเจกต์จากเครื่องนี้ขึ้นไปเก็บเป็นฐานข้อมูลแรก
+          await forcePushToGoogleSheets();
+        } else {
+          setProjects(remote);
+          setSyncState((prev) => ({
+            ...prev,
+            isSynced: true,
+            lastSyncedAt: new Date(),
+          }));
+        }
+      } catch (e) {
+        // Fallback ให้ใช้งาน Local ได้
+      }
+    };
+    initSync();
   }, []);
 
-  // วนรอบดึงข้อมูลใหม่ทุก 30 วินาที และเมื่อสลับหน้าจอกลับมา
+  // วนรอบดึงข้อมูลใหม่ทุก 30 วินาที และเมื่อสลับแท็บกลับมา
   useEffect(() => {
     const interval = setInterval(() => {
       if (!isDirtyRef.current) {
@@ -552,6 +605,31 @@ export default function App() {
         syncState={syncState}
         onOpenHolidays={() => setIsHolidayModalOpen(true)}
       />
+
+      {/* แถบเครื่องมือควบคุมการซิงก์ด่วน (Force Sync Bar) */}
+      <div className="max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pt-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <span className={`inline-block w-2.5 h-2.5 rounded-full ${syncState.isSyncing ? 'bg-amber-400 animate-pulse' : syncState.isSynced ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+          <span>
+            {syncState.isSyncing
+              ? 'กำลังซิงก์ข้อมูลกับ Google Sheets...'
+              : syncState.lastSyncedAt
+              ? `ซิงก์ล่าสุด: ${new Date(syncState.lastSyncedAt).toLocaleTimeString('th-TH')}`
+              : 'พร้อมใช้งาน'}
+          </span>
+        </div>
+
+        <button
+          onClick={forcePushToGoogleSheets}
+          disabled={syncState.isSyncing}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+        >
+          <svg className={`w-3.5 h-3.5 ${syncState.isSyncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Force Sync (ดันขึ้นชีตทันที)
+        </button>
+      </div>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
         {currentProjectId ? (
