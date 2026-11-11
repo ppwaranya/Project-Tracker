@@ -368,7 +368,6 @@ export function norm(p: Project): Project {
   if (!p.phases || p.phases.length !== 6) {
     p.phases = makeTimeline(p.category);
   }
-  // Enforce standard English phase names
   p.phases.forEach((ph) => {
     if (PHASE_NAMES_EN[ph.k]) {
       ph.name = PHASE_NAMES_EN[ph.k];
@@ -392,7 +391,6 @@ export function findTask(p: Project, id: string): Task | undefined {
   return flatTasks(p).find((t) => t.id === id);
 }
 
-// Logic: compute (Preserved strictly as required)
 export function compute(
   p: Project,
   holidaysSet?: Set<string>
@@ -468,16 +466,13 @@ export function otherPer(
   if (o.unit === 'ชิ้น') return a;
   if (!q) return 0;
   if (o.unit === 'เที่ยว') return (a * (Number(o.times) || 0)) / q;
-  // Per lot or other custom allocation units
   if (o.unit === 'ล็อต') return a / q;
-  // If unit has times multiplier
   if (o.times && Number(o.times) > 0) {
     return (a * Number(o.times)) / q;
   }
   return a / q;
 }
 
-// Logic: costOf (Preserved strictly as required + user additions: selected packaging & plate cost amortized)
 export function costOf(p: Project): CostSummaryResult {
   const q = Number(p.qty) || 0;
   const f =
@@ -491,7 +486,6 @@ export function costOf(p: Project): CostSummaryResult {
   let plateTotal = 0;
   const below: string[] = [];
 
-  // Filter only packaging selected for costing
   const activePackaging = p.packaging.filter((it) => it.selectedForCost !== false);
 
   activePackaging.forEach((it) => {
@@ -541,7 +535,6 @@ export function costOf(p: Project): CostSummaryResult {
   };
 }
 
-// Logic: summ (Preserved strictly as required + current task name helper)
 export function summ(
   p: Project,
   cs: Record<string, TaskComputeResult>,
@@ -618,3 +611,52 @@ export const DEFAULT_HOLIDAYS: Holiday[] = [
   { id: 'h3', date: '2026-12-31', name: 'วันสิ้นปี' },
   { id: 'h4', date: '2027-01-01', name: 'วันขึ้นปีใหม่' },
 ];
+
+// ฟังก์ชันบีบอัดรูปภาพให้ขนาดกะทัดรัดก่อนบันทึกลง Google Sheets (ประกาศเพียงรอบเดียว)
+export const compressImageFile = (
+  file: File,
+  maxWidth = 600,
+  maxHeight = 600,
+  quality = 0.65
+): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(event.target?.result as string);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedBase64);
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};

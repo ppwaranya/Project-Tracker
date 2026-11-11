@@ -5,7 +5,6 @@ import {
   PackagingStatus,
   Project,
   ProjectDocument,
-  RegulatoryItem,
 } from '../lib/types';
 import {
   baht,
@@ -26,6 +25,7 @@ import {
   todayISO,
   uid,
   VAT_RATE,
+  compressImageFile,
 } from '../lib/trackerLogic';
 import { GanttChart } from './GanttChart';
 import { CostSummary } from './CostSummary';
@@ -43,19 +43,13 @@ import {
   Info,
   Sparkles,
   ShieldCheck,
-  Package,
-  Layers,
   Image as ImageIcon,
-  DollarSign,
-  Clock,
   Award,
-  Upload,
   X,
   FileCheck,
   Lock,
   ChevronDown,
   ChevronRight,
-  Pencil,
 } from 'lucide-react';
 
 interface ProjectDetailProps {
@@ -248,6 +242,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     );
   };
 
+  // บันทึกรูปภาพขึ้นชีตทันที
+  const updateImmediately = (partial: Partial<Project>) => {
+    if (isViewOnly) return;
+    const base = draftProject || savedProject;
+    const updated = {
+      ...base,
+      ...partial,
+      updatedAt: Date.now(),
+      rev: (base.rev || 0) + 1,
+    };
+    if (draftProject) {
+      setDraftProject(updated);
+    }
+    onUpdateProject(updated);
+  };
+
   const handleDuplicate = () => {
     onDuplicateProject(project);
   };
@@ -332,7 +342,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     }
   };
 
-  // Add external link to docs
   const handleAddLink = (e: React.FormEvent) => {
     e.preventDefault();
     if (!linkUrl.trim()) return;
@@ -354,7 +363,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     setLinkTitle('');
   };
 
-  // Multi-line paste ingredients
   const handlePasteIngredients = () => {
     if (!ingPasteText.trim()) return;
     const lines = ingPasteText.split(/\r?\n/);
@@ -379,35 +387,31 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     setShowPasteArea(false);
   };
 
-  // Multiple Image Upload Helper (Supports uploading more than 1 image!)
-  const handleMultipleImageUpload = (
+  const handleMultipleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     currentImages: string[],
     onSuccess: (newImages: string[]) => void
   ) => {
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files);
-      const loadedUrls: string[] = [];
-      let completed = 0;
+      const compressedUrls: string[] = [];
 
-      files.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (typeof reader.result === 'string') {
-            loadedUrls.push(reader.result);
-          }
-          completed++;
-          if (completed === files.length) {
-            onSuccess([...currentImages, ...loadedUrls]);
-          }
-        };
-        reader.readAsDataURL(file);
-      });
-      e.target.value = ''; // Reset input to allow re-upload
+      for (const file of files) {
+        try {
+          const comp = await compressImageFile(file, 600, 600, 0.65);
+          compressedUrls.push(comp);
+        } catch (err) {
+          console.error('Image compression failed:', err);
+        }
+      }
+
+      if (compressedUrls.length > 0) {
+        onSuccess([...currentImages, ...compressedUrls]);
+      }
+      e.target.value = '';
     }
   };
 
-  // Create new iteration directly from an existing formula (User Request in Formula)
   const handleIterateFromFormula = (sourceFormula: Formula) => {
     const nextVer = `V${project.formulas.length + 1}`;
     const newFormula: Formula = {
@@ -443,7 +447,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top Header / Navigation & Actions */}
       <div
         className={`rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden ${
           displayCategory(project.category) === 'Dietary Supplement'
@@ -470,7 +473,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </button>
           )}
 
-          {/* Full Multiline Project Name (Never truncated, wraps to new line) */}
           <div className="w-full">
             <textarea
               rows={1}
@@ -493,7 +495,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap pt-0.5">
-            {/* Lot Number input */}
             <div className="flex items-center gap-1 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">
               <span className="text-[11px] font-bold text-slate-500 uppercase">
                 Lot:
@@ -541,10 +542,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-shrink-0 self-end md:self-center">
           {!isViewOnly && panelActions('project-info', false)}
-          {/* Share View-Only Link Button */}
           <button
             onClick={() => {
               const url = new URL(window.location.href);
@@ -592,9 +591,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </div>
       </div>
 
-      {/* KPI Summary Banner (Niond Style Pastel & Slate Cards) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* Card 1: Current Stage - Lavender */}
         <div className="bg-[#eee8ff] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#ded5fc] shadow-2xs flex flex-col justify-between">
           <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4d3b94] block mb-1">
             Current Stage
@@ -617,7 +614,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </span>
         </div>
 
-        {/* Card 2: Overall Progress - Mint */}
         <div className="bg-[#cbf7df] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#b1f1ce] shadow-2xs flex flex-col justify-between">
           <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0e5c36] block mb-1">
             Overall Progress
@@ -628,7 +624,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </span>
         </div>
 
-        {/* Card 3: Est. Arrival - Sky Blue */}
         <div className="bg-[#daf0ff] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#c4e5ff] shadow-2xs flex flex-col justify-between">
           <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#124d91] block mb-1">
             Est. Arrival Date
@@ -641,7 +636,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </span>
         </div>
 
-        {/* Card 4: Total Unit Cost */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs flex flex-col justify-between">
           <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block mb-1">
             Total Unit Cost
@@ -666,7 +660,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </div>
       </div>
 
-      {/* Tabs Navigation (Niond-Style Lime Active Pill) */}
       <div className="border-b border-slate-200/80 overflow-x-auto scrollbar-none pb-1">
         <nav className="flex space-x-1.5 sm:space-x-2 min-w-max p-1 bg-slate-200/60 rounded-2xl">
           {[
@@ -696,7 +689,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* Section 1: Specifications & FDA Licensing */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <fieldset disabled={!canEdit('overview-specifications')} className="contents">
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2">
@@ -752,7 +744,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 />
               </div>
 
-              {/* FDA / Regulatory License Number (User Request in Overview) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1 text-emerald-800 flex items-center gap-1">
                   <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
@@ -835,7 +826,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </fieldset>
           </section>
 
-          {/* Section 2: Product Reference & Benchmark (COMPACT & MULTI-IMAGE SUPPORT) */}
+          {/* Section 2: Product Reference & Benchmark */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <fieldset disabled={!canEdit('overview-benchmark')} className="contents">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
@@ -919,42 +910,42 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </div>
               </div>
 
-              {/* Compact Multiple Images Gallery (User Request in Overview) */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-slate-700">
                     Benchmark Images ({project.benchmark?.images?.length || 0})
                   </label>
-                  <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Upload Images</span>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={(e) =>
-                        handleMultipleImageUpload(
-                          e,
-                          project.benchmark?.images || [],
-                          (newImages) =>
-                            update({
-                              benchmark: {
-                                ...(project.benchmark || {
-                                  name: '',
-                                  description: '',
-                                  images: [],
-                                }),
-                                images: newImages,
-                              },
-                            })
-                        )
-                      }
-                      className="hidden"
-                    />
-                  </label>
+                  {!isViewOnly && (
+                    <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Upload Images</span>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        onChange={(e) =>
+                          handleMultipleImageUpload(
+                            e,
+                            project.benchmark?.images || [],
+                            (newImages) =>
+                              updateImmediately({
+                                benchmark: {
+                                  ...(project.benchmark || {
+                                    name: '',
+                                    description: '',
+                                    images: [],
+                                  }),
+                                  images: newImages,
+                                },
+                              })
+                          )
+                        }
+                        className="hidden"
+                      />
+                    </label>
+                  )}
                 </div>
 
-                {/* Compact Thumbnail Grid */}
                 <div className="grid grid-cols-3 gap-2 p-2.5 rounded-2xl bg-slate-50 border border-slate-200 min-h-[90px]">
                   {(!project.benchmark?.images || project.benchmark.images.length === 0) ? (
                     <div className="col-span-3 py-4 text-center text-slate-400 text-xs flex flex-col items-center justify-center">
@@ -989,28 +980,30 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           tabIndex={0}
                           className="h-full w-full cursor-zoom-in object-cover"
                         />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updatedImages = (project.benchmark?.images || []).filter(
-                              (_, idx) => idx !== imgIdx
-                            );
-                            update({
-                              benchmark: {
-                                ...(project.benchmark || {
-                                  name: '',
-                                  description: '',
-                                  images: [],
-                                }),
-                                images: updatedImages,
-                              },
-                            });
-                          }}
-                          className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                          title="Remove image"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+                        {!isViewOnly && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updatedImages = (project.benchmark?.images || []).filter(
+                                (_, idx) => idx !== imgIdx
+                              );
+                              updateImmediately({
+                                benchmark: {
+                                  ...(project.benchmark || {
+                                    name: '',
+                                    description: '',
+                                    images: [],
+                                  }),
+                                  images: updatedImages,
+                                },
+                              });
+                            }}
+                            className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            title="Remove image"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     ))
                   )}
@@ -1074,7 +1067,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </div>
             </div>
 
-            {/* Paste box */}
             {showPasteArea && !collapsedPanels.has('overview-ingredients') && (
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                 <p className="text-xs text-slate-600 font-medium">
@@ -1369,7 +1361,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </table>
             </div>
 
-            {/* Quick Templates */}
             <div
               className="flex items-center gap-1.5 flex-wrap pt-1 text-xs"
               hidden={collapsedPanels.has('overview-tests')}
@@ -1583,7 +1574,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </table>
             </div>
 
-            {/* Quick Templates for Regulatory */}
             <div
               className="flex items-center gap-1.5 flex-wrap pt-1 text-xs"
               hidden={collapsedPanels.has('overview-permits')}
@@ -1779,11 +1769,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             {project.formulas
               .slice()
               .reverse()
-              .map((f, i) => {
+              .map((f) => {
                 const isChosen = f.id === project.chosenFormula;
                 const formulaPriceRes = lookup(f.steps, Number(project.qty) || 0);
 
-                // Delta vs previous version
                 const originalIndex = project.formulas.findIndex((x) => x.id === f.id);
                 let deltaText = '';
                 if (originalIndex > 0) {
@@ -1836,10 +1825,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     </div>
                     <div hidden={collapsedPanels.has(`formula-${f.id}`)}>
                     <fieldset disabled={!canEdit(`formula-${f.id}`)} className="contents">
-                    {/* Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
                       <div className="flex items-center gap-2.5 flex-wrap">
-                        {/* Version */}
                         <input
                           type="text"
                           value={f.ver}
@@ -1852,7 +1839,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           className="w-16 font-extrabold text-slate-900 px-2 py-1 rounded-xl border border-slate-200 bg-slate-50 text-sm text-center"
                         />
 
-                        {/* Formula Code Input */}
                         <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">
                           <span className="text-[11px] font-bold text-slate-400">
                             Code:
@@ -1883,7 +1869,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           className="text-xs px-2.5 py-1 rounded-xl border border-slate-200 bg-white"
                         />
 
-                        {/* Price readout */}
                         <div className="flex items-center gap-2 pl-2">
                           {costPrivacy ? (
                             <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md font-mono">
@@ -1906,9 +1891,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         </div>
                       </div>
 
-                      {/* Right Action Buttons */}
                       <div className="flex items-center gap-2 flex-wrap">
-                        {/* New Version from this formula button */}
                         {!isViewOnly && (
                           <button
                             type="button"
@@ -1921,7 +1904,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           </button>
                         )}
 
-                        {/* Confirm Formulation Button */}
                         <button
                           type="button"
                           disabled={isViewOnly}
@@ -1955,7 +1937,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           <span>Use for Costing</span>
                         </label>
 
-                        {/* Delete Formula Button (User Request: ให้ลบสูตรได้ด้วย เผื่อกดผิด) */}
                         {!isViewOnly && (
                           <button
                             type="button"
@@ -2002,9 +1983,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                     </div>
 
-                    {/* Body */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 pt-4">
-                      {/* Notes & Multi-Image Gallery */}
                       <div className="space-y-4 lg:col-span-2">
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -2026,38 +2005,38 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           />
                         </div>
 
-                        {/* Multiple Sample Images (User Request: all image sections must support > 1 image!) */}
                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                               <ImageIcon className="w-4 h-4 text-slate-500" />
                               <span>Sample & Physical Appearance Images ({f.images?.length || 0})</span>
                             </span>
-                            <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Upload Images</span>
-                              <input
-                                type="file"
-                                multiple
-                                accept="image/*"
-                                onChange={(e) =>
-                                  handleMultipleImageUpload(
-                                    e,
-                                    f.images || [],
-                                    (newImgs) => {
-                                      const newFs = project.formulas.map((x) =>
-                                        x.id === f.id ? { ...x, images: newImgs } : x
-                                      );
-                                      update({ formulas: newFs });
-                                    }
-                                  )
-                                }
-                                className="hidden"
-                              />
-                            </label>
+                            {!isViewOnly && (
+                              <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Upload Images</span>
+                                <input
+                                  type="file"
+                                  multiple
+                                  accept="image/*"
+                                  onChange={(e) =>
+                                    handleMultipleImageUpload(
+                                      e,
+                                      f.images || [],
+                                      (newImgs) => {
+                                        const newFs = project.formulas.map((x) =>
+                                          x.id === f.id ? { ...x, images: newImgs } : x
+                                        );
+                                        updateImmediately({ formulas: newFs });
+                                      }
+                                    )
+                                  }
+                                  className="hidden"
+                                />
+                              </label>
+                            )}
                           </div>
 
-                          {/* Multi-image thumbnail grid */}
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                             {(!f.images || f.images.length === 0) ? (
                               <div className="col-span-full py-4 text-center text-slate-400 text-xs">
@@ -2091,21 +2070,23 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     tabIndex={0}
                                     className="h-full w-full cursor-zoom-in object-cover"
                                   />
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const newImgs = (f.images || []).filter(
-                                        (_, idx) => idx !== imgIdx
-                                      );
-                                      const newFs = project.formulas.map((x) =>
-                                        x.id === f.id ? { ...x, images: newImgs } : x
-                                      );
-                                      update({ formulas: newFs });
-                                    }}
-                                    className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
+                                  {!isViewOnly && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newImgs = (f.images || []).filter(
+                                          (_, idx) => idx !== imgIdx
+                                        );
+                                        const newFs = project.formulas.map((x) =>
+                                          x.id === f.id ? { ...x, images: newImgs } : x
+                                        );
+                                        updateImmediately({ formulas: newFs });
+                                      }}
+                                      className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
                                 </div>
                               ))
                             )}
@@ -2131,7 +2112,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         </div>
                       </div>
 
-                      {/* Tiered Step Pricing */}
                       <div className="bg-slate-50/90 p-4 rounded-2xl border border-slate-200 space-y-2.5">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <span className="text-xs font-bold text-slate-800">
@@ -2238,7 +2218,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                     </div>
 
-                    {/* Formula Ingredients Breakdown */}
                     <div className="pt-4 border-t border-slate-100 space-y-2.5">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
@@ -2302,7 +2281,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               }}
                               className="flex items-center gap-1 text-[11px] font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-2.5 py-1 rounded-lg transition-colors cursor-pointer shadow-2xs"
                             >
-                              <Plus className="w-3 h-3" />
+                              <Plus className="w-3.5 h-3.5" />
                               <span>Add Ingredient</span>
                             </button>
                           </div>
@@ -2484,7 +2463,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </p>
             </div>
 
-            {/* Add Package button */}
             <div className="ml-auto flex items-center gap-2">
             <button
               disabled={!canEdit('packaging-new')}
@@ -2541,10 +2519,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           : 'border-slate-200 bg-slate-50/60 opacity-80'
                       }`}
                     >
-                    {/* Header: Package Selection + Type + English Status + Delete */}
                     <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
                       <div className="flex items-center gap-3 flex-wrap">
-                        {/* Checkbox to select for cost calculation */}
                         <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 transition-colors">
                           <input
                             type="checkbox"
@@ -2583,7 +2559,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           ))}
                         </select>
 
-                        {/* Status in English */}
                         <div className="flex items-center gap-1.5">
                           <span className="text-[11px] font-bold text-slate-400">
                             Status:
@@ -2672,7 +2647,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     </div>
 
                     <div hidden={collapsedPanels.has(packagePanelId)}>
-                    {/* Basic specs: Name, Supplier, MOQ */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -2731,7 +2705,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                     </div>
 
-                    {/* EXPANDED SPECIFICATIONS & DETAILS FIELD (User Request in Packaging) */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
                         Detailed Specifications, Dimensions & Dieline (ช่องใส่สเปกและรายละเอียดแบบขยาย)
@@ -2750,7 +2723,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       />
                     </div>
 
-                    {/* Terms & Commercials: Plate Cost, Lead Time, Payment Terms, Warranty */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-50/80 rounded-2xl border border-slate-200">
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -2845,9 +2817,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                     </div>
 
-                    {/* Step Pricing & Multi-Image Gallery */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-                      {/* Step Pricing Table */}
                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
                         <span className="text-xs font-bold text-slate-800 block">
                           Tiered Pricing Ladder
@@ -2933,37 +2903,37 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         )}
                       </div>
 
-                      {/* Multiple Images Gallery for Packaging (User Request: All image sections support > 1 image!) */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <label className="block text-xs font-bold text-slate-700">
                             Packaging Mockup & Dieline Images ({it.images?.length || 0})
                           </label>
-                          <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>Upload Images</span>
-                            <input
-                              type="file"
-                              multiple
-                              accept="image/*"
-                              onChange={(e) =>
-                                handleMultipleImageUpload(
-                                  e,
-                                  it.images || [],
-                                  (newImgs) => {
-                                    const copy = project.packaging.map((x) =>
-                                      x.id === it.id ? { ...x, images: newImgs } : x
-                                    );
-                                    update({ packaging: copy });
-                                  }
-                                )
-                              }
-                              className="hidden"
-                            />
-                          </label>
+                          {!isViewOnly && (
+                            <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Upload Images</span>
+                              <input
+                                type="file"
+                                multiple
+                                accept="image/*"
+                                onChange={(e) =>
+                                  handleMultipleImageUpload(
+                                    e,
+                                    it.images || [],
+                                    (newImgs) => {
+                                      const copy = project.packaging.map((x) =>
+                                        x.id === it.id ? { ...x, images: newImgs } : x
+                                      );
+                                      updateImmediately({ packaging: copy });
+                                    }
+                                  )
+                                }
+                                className="hidden"
+                              />
+                            </label>
+                          )}
                         </div>
 
-                        {/* Multi-image thumbnail grid */}
                         <div className="grid grid-cols-3 gap-2 p-2.5 rounded-2xl bg-slate-50 border border-slate-200 min-h-[90px]">
                           {(!it.images || it.images.length === 0) ? (
                             <div className="col-span-3 py-4 text-center text-slate-400 text-xs flex flex-col items-center justify-center">
@@ -2998,21 +2968,23 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   tabIndex={0}
                                   className="h-full w-full cursor-zoom-in object-cover"
                                 />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newImgs = (it.images || []).filter(
-                                      (_, idx) => idx !== imgIdx
-                                    );
-                                    const copy = project.packaging.map((x) =>
-                                      x.id === it.id ? { ...x, images: newImgs } : x
-                                    );
-                                    update({ packaging: copy });
-                                  }}
-                                  className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
+                                {!isViewOnly && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newImgs = (it.images || []).filter(
+                                        (_, idx) => idx !== imgIdx
+                                      );
+                                      const copy = project.packaging.map((x) =>
+                                        x.id === it.id ? { ...x, images: newImgs } : x
+                                      );
+                                      updateImmediately({ packaging: copy });
+                                    }}
+                                    className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                )}
                               </div>
                             ))
                           )}
@@ -3081,7 +3053,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
           </section>
 
-          {/* Other / Operating Expenses & Custom Allocation Units */}
           <fieldset disabled={!canEdit('cost-other')} className="contents">
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
@@ -3165,7 +3136,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             />
                           </td>
 
-                          {/* Editable Custom Allocation Unit */}
                           <td className="p-2">
                             <input
                               type="text"
@@ -3309,7 +3279,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* TAB 5: TIMELINE & GANTT */}
       {activeTab === 'timeline' && (
         <div className="space-y-6">
-          {/* Timeline Summary Metrics */}
           {!isViewOnly && (
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-3">
             <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 font-heading">
@@ -3368,7 +3337,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </section>
           )}
 
-          {/* Collapsible Gantt Chart Section */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 font-heading">
               <span className="min-w-0 flex-1">Weekly Gantt Chart</span>
@@ -3379,7 +3347,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
           </section>
 
-          {/* Phased Task Schedule */}
           {!isViewOnly && (
           <fieldset disabled={!canEdit('timeline-schedule')} className="contents">
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
@@ -3419,7 +3386,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
                     return (
                       <React.Fragment key={ph.k}>
-                        {/* Phase Header Row */}
                         <tr className="bg-slate-100/90 font-bold text-slate-900">
                           <td colSpan={7} className="py-2.5 px-3.5">
                             <div className="flex items-center justify-between">
@@ -3461,7 +3427,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           </td>
                         </tr>
 
-                        {/* Task Rows */}
                         {ph.tasks.map((t) => {
                           const r = cs[t.id];
                           const earlier = earlierTasks.filter(
@@ -3584,7 +3549,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     }));
                                     update({ phases: newPhases });
                                   }}
-                                  className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-center tabular-nums font-bold"
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-center tabular-nums font-bold"
                                 />
                               </td>
 
@@ -3662,7 +3627,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </div>
             </div>
 
-            {/* External Link Input Form */}
             <form
               onSubmit={handleAddLink}
               hidden={collapsedPanels.has('docs-upload')}
@@ -3723,7 +3687,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </section>
           </fieldset>
 
-          {/* Documents Table */}
           <fieldset disabled={!canEdit('docs-list')} className="contents">
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
