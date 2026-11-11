@@ -1,8 +1,8 @@
 import { Holiday, Project } from './types';
 import { norm } from './trackerLogic';
 
-// วาง URL ของ Google Apps Script ที่ได้จากขั้นตอนที่ 1 ตรงนี้
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbySLdEBAgqzskXBdOKl1Fr5xRupoJqfXpPH2L4V7gWzV7vEgPewCyA36X0rBlKqf6Gs/exec';
+// นำ URL ที่ลงท้ายด้วย /exec จาก Google Apps Script มาวางในเครื่องหมายคำพูดนี้
+const APPS_SCRIPT_URL = 'วาง_URL_ของ_GOOGLE_APPS_SCRIPT_ที่นี่';
 
 const CACHE_KEY_PROJECTS = 'launch_tracker_projects_cache';
 const CACHE_KEY_HOLIDAYS = 'launch_tracker_holidays_cache';
@@ -65,11 +65,20 @@ export class GoogleSheetsService {
     _holidaysSet?: Set<string>
   ): Promise<void> {
     localStorage.setItem(CACHE_KEY_PROJECTS, JSON.stringify(projects));
+
+    // ส่งแบบ text/plain เพื่อเลี่ยงการตรวจ CORS Preflight
     const res = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
       body: JSON.stringify({ type: 'projects', data: projects }),
     });
+
+    if (!res.ok) {
+      throw new Error(`Server status: ${res.status}`);
+    }
+
     const json = await res.json();
     if (json.status !== 'success') {
       throw new Error(json.message || 'Failed to save to Google Sheets');
@@ -82,11 +91,19 @@ export class GoogleSheetsService {
     holidays: Holiday[] = []
   ): Promise<void> {
     localStorage.setItem(CACHE_KEY_HOLIDAYS, JSON.stringify(holidays));
+
     const res = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
       body: JSON.stringify({ type: 'holidays', data: holidays }),
     });
+
+    if (!res.ok) {
+      throw new Error(`Server status: ${res.status}`);
+    }
+
     const json = await res.json();
     if (json.status !== 'success') {
       throw new Error(json.message || 'Failed to save holidays to Google Sheets');
