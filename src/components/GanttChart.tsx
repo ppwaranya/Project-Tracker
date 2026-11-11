@@ -22,7 +22,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   project,
   computedTasks,
 }) => {
-  // Collapsible phases state as requested
   const [collapsedPhases, setCollapsedPhases] = useState<Set<number>>(new Set());
 
   const fl = flatTasks(project);
@@ -66,12 +65,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   const n = weeks.length;
   const w0 = pd(weeks[0]).getTime();
 
-  // Exact math from original ganttHtml
   const wi = (s: string) =>
     Math.round((pd(monday(s)).getTime() - w0) / (7 * 864e5));
   const di = (s: string) => Math.min(4, (dow(s) + 6) % 7);
 
-  // Group weeks by Month
   const months: { k: string; n: number }[] = [];
   weeks.forEach((w) => {
     const k = w.slice(0, 7);
@@ -84,8 +81,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   });
 
   const td = todayISO();
-  const showToday =
-    td >= weeks[0] && td <= addD(weeks[n - 1], 6);
+  const showToday = td >= weeks[0] && td <= addD(weeks[n - 1], 6);
   const tf = Math.min(5, (dow(td) + 6) % 7) / 5;
   const todayLeft = showToday ? Math.round((wi(td) + tf) * CW) : null;
 
@@ -119,14 +115,14 @@ export const GanttChart: React.FC<GanttChartProps> = ({
 
   return (
     <div className="space-y-3">
-      {/* Controls to Collapse / Expand All */}
+      {/* Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-600 px-1">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-bold text-slate-800">
             Weekly Timeline & Milestones
           </span>
-          <span className="text-[11px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md font-medium lg:hidden">
-            Swipe left/right to scroll timeline ↔
+          <span className="text-[11px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md font-medium">
+            เลื่อนซ้าย-ขวา เพื่อดูไทม์ไลน์ (คอลัมน์ซ้ายและหัวตารางถูกล็อกไว้)
           </span>
         </div>
         <div className="flex items-center gap-2 self-end sm:self-auto">
@@ -145,9 +141,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         </div>
       </div>
 
-      <div className="overflow-x-auto border border-slate-200 rounded-2xl bg-white shadow-2xs max-w-full touch-pan-x">
+      {/* กรอบตารางแบบ Scroll ทั้งแนวนอนและแนวตั้ง พร้อมคงการ Freeze แถวและคอลัมน์ */}
+      <div className="overflow-auto max-h-[72vh] border border-slate-200 rounded-2xl bg-white shadow-2xs max-w-full touch-pan-x">
         <table
-          className="border-collapse border-spacing-0 table-fixed bg-white text-xs select-none"
+          className="border-separate border-spacing-0 table-fixed bg-white text-xs select-none"
           style={{ width: `${NW + n * CW}px` }}
         >
           <colgroup>
@@ -157,31 +154,35 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             ))}
           </colgroup>
 
-          {/* Month & Week Headers */}
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-100/90">
+          {/* Month & Week Headers (ตรึงให้อยู่ด้านบนสุดเสมอ) */}
+          <thead className="sticky top-0 z-30 shadow-xs">
+            {/* แถวเดือน */}
+            <tr>
               <th
                 rowSpan={2}
-                className="sticky left-0 z-20 bg-slate-100 px-3.5 py-2 text-left font-bold text-slate-800 border-r border-slate-200 text-xs font-heading"
+                style={{ width: `${NW}px`, minWidth: `${NW}px` }}
+                className="sticky left-0 top-0 z-40 bg-slate-100 px-3.5 py-2 text-left font-bold text-slate-800 border-r border-b border-slate-200 text-xs font-heading shadow-[4px_0_10px_-3px_rgba(0,0,0,0.06)]"
               >
                 Phase & Tasks
               </th>
               {months.map((x, idx) => {
                 const a = x.k.split('-').map(Number);
                 const monthName = TM[a[1] - 1] || '';
-                const yearCe = a[0]; // English CE year, e.g. 2026
+                const yearCe = a[0];
                 return (
                   <th
                     key={idx}
                     colSpan={x.n}
-                    className="px-2 py-1.5 text-center font-bold text-slate-800 border-l border-slate-200 bg-slate-100/95 tracking-wide text-xs"
+                    className="px-2 py-1.5 text-center font-bold text-slate-800 border-l border-b border-slate-200 bg-slate-100 tracking-wide text-xs"
                   >
                     {monthName} {yearCe}
                   </th>
                 );
               })}
             </tr>
-            <tr className="border-b border-slate-200 bg-slate-50">
+
+            {/* แถวสัปดาห์ */}
+            <tr>
               {weeks.map((w, idx) => {
                 const dayNum = +w.slice(8);
                 const weekNum = Math.ceil(dayNum / 7);
@@ -189,7 +190,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   <th
                     key={idx}
                     title={`Week starting ${fmt(w)}`}
-                    className="py-1 text-center font-semibold text-slate-500 border-l border-slate-200 text-[11px] leading-tight"
+                    className="py-1 text-center font-semibold text-slate-600 border-l border-b border-slate-200 bg-slate-50 text-[11px] leading-tight"
                   >
                     <span className="text-[10px] text-slate-400 block font-normal">
                       W{weekNum}
@@ -218,7 +219,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 }
               });
 
-              // Phase Bar calculation
               let phaseBarLeft = 0;
               let phaseBarWidth = 0;
               if (ps && pe) {
@@ -232,12 +232,16 @@ export const GanttChart: React.FC<GanttChartProps> = ({
 
               return (
                 <React.Fragment key={ph.k}>
-                  {/* Phase Row with Collapse / Expand Toggle */}
+                  {/* แถว Phase Header */}
                   <tr
                     onClick={() => togglePhase(ph.k)}
-                    className="border-b border-slate-200 bg-slate-50/90 hover:bg-amber-50/50 transition-colors cursor-pointer"
+                    className="border-b border-slate-200 bg-slate-50/90 hover:bg-amber-50/50 transition-colors cursor-pointer group"
                   >
-                    <td className="sticky left-0 z-10 bg-slate-50/95 px-3 py-2 font-bold text-slate-900 border-r border-slate-200">
+                    {/* เซลล์ชื่อ Phase: ตรึงด้านซ้าย */}
+                    <td
+                      style={{ width: `${NW}px`, minWidth: `${NW}px` }}
+                      className="sticky left-0 z-20 bg-slate-100 px-3 py-2 font-bold text-slate-900 border-r border-b border-slate-200 shadow-[4px_0_10px_-3px_rgba(0,0,0,0.06)]"
+                    >
                       <div className="flex items-start gap-2">
                         <button
                           type="button"
@@ -264,8 +268,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                       </div>
                     </td>
 
-                    <td colSpan={n} className="p-0 relative h-9">
-                      {/* Grid lines */}
+                    {/* เซลล์ตารางไทม์ไลน์ของ Phase */}
+                    <td colSpan={n} className="p-0 relative h-9 border-b border-slate-200">
                       <div
                         className="absolute inset-0 pointer-events-none"
                         style={{
@@ -275,7 +279,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                         }}
                       />
 
-                      {/* Today marker */}
                       {todayLeft !== null && (
                         <div
                           className="absolute top-0 bottom-0 w-0.5 bg-rose-500 z-10 pointer-events-none shadow-xs"
@@ -284,7 +287,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                         />
                       )}
 
-                      {/* Phase span bar */}
                       {ps && pe && (
                         <div
                           className="absolute top-2.5 h-3 rounded-md shadow-xs transition-all flex items-center px-1 text-[10px] text-white font-bold truncate"
@@ -303,7 +305,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                     </td>
                   </tr>
 
-                  {/* Task Rows (Shown only if phase is NOT collapsed) */}
+                  {/* แถว Task ย่อย */}
                   {!isCollapsed &&
                     ph.tasks.map((t) => {
                       const r = computedTasks[t.id];
@@ -319,8 +321,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                           key={t.id}
                           className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors"
                         >
+                          {/* เซลล์ชื่องาน Task: ตรึงด้านซ้าย พร้อมพื้นหลังสีขาวทึบ */}
                           <td
-                            className="sticky left-0 z-10 bg-white px-3 py-1.5 text-slate-700 border-r border-slate-200 text-xs align-top"
+                            style={{ width: `${NW}px`, minWidth: `${NW}px` }}
+                            className="sticky left-0 z-10 bg-white px-3 py-1.5 text-slate-700 border-r border-b border-slate-100 text-xs align-top shadow-[4px_0_10px_-3px_rgba(0,0,0,0.06)]"
                             title={t.name}
                           >
                             <div className="flex items-start gap-1.5 pl-5">
@@ -341,8 +345,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                             </div>
                           </td>
 
-                          <td colSpan={n} className="p-0 relative h-8">
-                            {/* Grid lines */}
+                          {/* เซลล์แท่ง Gantt bar */}
+                          <td colSpan={n} className="p-0 relative h-8 border-b border-slate-100">
                             <div
                               className="absolute inset-0 pointer-events-none"
                               style={{
@@ -352,7 +356,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                               }}
                             />
 
-                            {/* Today marker */}
                             {todayLeft !== null && (
                               <div
                                 className="absolute top-0 bottom-0 w-0.5 bg-rose-500 z-10 pointer-events-none"
@@ -360,7 +363,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                               />
                             )}
 
-                            {/* Task Bar with {t.days}d abbreviation */}
                             <div
                               className={`absolute top-1.5 h-5 rounded-md px-1.5 flex items-center text-[10px] font-bold text-white shadow-2xs truncate transition-all ${
                                 t.done
@@ -391,19 +393,20 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         </table>
       </div>
 
+      {/* Footer คำอธิบายสัญลักษณ์ */}
       <div className="flex items-center justify-between text-xs text-slate-500 px-1 flex-wrap gap-2">
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-0.5 bg-rose-500 rounded-full" />
-            <span>Red line indicates "Today"</span>
+            <span>เส้นสีแดง: วันที่ปัจจุบัน (Today)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-2.5 bg-slate-400 rounded-xs opacity-40" />
-            <span>Faded bars represent completed tasks</span>
+            <span>แถบจาง: งานที่เสร็จสิ้นแล้ว</span>
           </div>
         </div>
         <p className="italic text-slate-400">
-          Scroll horizontally to view the full timeline
+          สามารถเลื่อนแนวนอนเพื่อตรวจดูสัปดาห์ถัดไปได้อย่างอิสระ
         </p>
       </div>
     </div>

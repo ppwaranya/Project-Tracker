@@ -20,6 +20,21 @@ const getSharedProjectId = (hash: string): string | null => {
   return hash.match(/^#?view\/([^&]+)/)?.[1] || null;
 };
 
+// ตัวช่วยอ่าน Project ID จาก URL Hash หรือ fallback จาก localStorage
+const getInitialProjectId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash.replace(/^#/, '');
+  const sharedId = getSharedProjectId(window.location.hash);
+  if (sharedId) return sharedId;
+
+  const pMatch = hash.match(/p-([^&]+)/);
+  if (pMatch) return pMatch[1];
+  if (hash.startsWith('p-')) return hash.slice(2);
+
+  // ถ้าใน Hash ไม่มี ให้ดึงจากที่เคยบันทึกไว้ล่าสุด
+  return localStorage.getItem('last_active_project_id') || null;
+};
+
 // Sample demo project for fresh users
 const createSampleProject = (): Project => {
   const p = makeProject('อาหารเสริม');
@@ -213,7 +228,7 @@ export default function App() {
   );
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
 
-  // Cost Privacy Mode (Presentation Mode) - Default loaded from localStorage
+  // Cost Privacy Mode
   const [costPrivacy, setCostPrivacy] = useState<boolean>(() => {
     return localStorage.getItem('launch_tracker_cost_privacy') === 'true';
   });
@@ -231,6 +246,9 @@ export default function App() {
     return DEFAULT_HOLIDAYS;
   });
 
+  // สถานะเพื่อตรวจว่าดาวน์โหลดข้อมูลครั้งแรกเสร็จหรือยัง ป้องกันหน้าว่างตอนรีเฟรช
+  const [isInitialLoadDone, setIsInitialLoadDone] = useState(false);
+
   // Sync state
   const [syncState, setSyncState] = useState<SyncState>({
     isSynced: false,
@@ -241,16 +259,30 @@ export default function App() {
     error: null,
   });
 
-  // Navigation hash routing (#all, #p-{id}, #view-only)
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(() => {
-    const hash = window.location.hash.replace(/^#/, '');
-    const sharedProjectId = getSharedProjectId(window.location.hash);
-    if (sharedProjectId) return sharedProjectId;
-    const pMatch = hash.match(/p-([^&]+)/);
-    if (pMatch) return pMatch[1];
-    if (hash.startsWith('p-')) return hash.slice(2);
-    return null;
-  });
+  // Navigation state (อ่านค่าหน้าเดิมจาก Hash และ LocalStorage)
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(getInitialProjectId);
+
+  // จดจำและซิงก์ Project ID ลง LocalStorage เสมอ เพื่อให้รีเฟรชแล้วอยู่หน้าเดิม 100%
+  useEffect(() => {
+    if (currentProjectId) {
+      localStorage.setItem('last_active_project_id', currentProjectId);
+      const isView = isUrlViewOnly || currentUser?.role === 'Viewer';
+      const targetHash = sharedProjectId
+        ? `view/${sharedProjectId}`
+        : isView
+        ? `p-${currentProjectId}&view-only`
+        : `p-${currentProjectId}`;
+      if (window.location.hash !== `#${targetHash}`) {
+        window.location.hash = targetHash;
+      }
+    } else {
+      localStorage.removeItem('last_active_project_id');
+      const targetHash = isUrlViewOnly ? 'view-only' : 'all';
+      if (window.location.hash !== `#${targetHash}` && !sharedProjectId) {
+        window.location.hash = targetHash;
+      }
+    }
+  }, [currentProjectId, isUrlViewOnly, currentUser?.role, sharedProjectId]);
 
   // Holidays Modal
   const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
@@ -265,12 +297,10 @@ export default function App() {
     toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Holidays Set for fast lookup in date math
   const holidaysSet = useMemo(() => {
     return new Set(holidays.map((h) => h.date).filter(Boolean));
   }, [holidays]);
 
-  // Debounced autosave ref
   const saveTimerRef = useRef<any>(null);
   const isDirtyRef = useRef(false);
 
@@ -302,10 +332,11 @@ export default function App() {
         isSyncing: false,
         error: err?.message || 'Sync failed',
       }));
+    } finally {
+      setIsInitialLoadDone(true);
     }
   };
 
-  // ดันข้อมูลจากเครื่องนี้ขึ้น Google Sheets ทันที (Force Sync)
   const forcePushToGoogleSheets = async () => {
     setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
     try {
@@ -340,12 +371,10 @@ export default function App() {
     }
   };
 
-  // เปิดเว็บมาครั้งแรก ให้โหลดข้อมูลจากชีตทันที
   useEffect(() => {
     syncWithGoogleSheets();
   }, []);
 
-  // วนรอบดึงข้อมูลใหม่ทุก 10 วินาที (10,000 ms) และดึงทันทีเมื่อสลับแท็บกลับมา
   useEffect(() => {
     const interval = setInterval(() => {
       syncWithGoogleSheets();
@@ -380,7 +409,7 @@ export default function App() {
           setCurrentProjectId(pMatch[1]);
         } else if (hash.startsWith('p-')) {
           setCurrentProjectId(hash.slice(2));
-        } else {
+        } else if (hash === 'all' || hash === 'view-only') {
           setCurrentProjectId(null);
         }
       }
@@ -391,7 +420,6 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [sharedProjectId]);
 
-  // ฟังก์ชัน Autosave ส่งตรงเข้า Google Sheets
   const queueSave = (newProjects: Project[]) => {
     isDirtyRef.current = true;
     clearTimeout(saveTimerRef.current);
@@ -428,7 +456,6 @@ export default function App() {
     }, 700);
   };
 
-  // Toggle Cost Privacy
   const handleToggleCostPrivacy = () => {
     if (isViewOnly) {
       showToast('Cost figures are restricted for Viewer role');
@@ -455,7 +482,6 @@ export default function App() {
     return true;
   };
 
-  // Project CRUD handlers
   const handleCreateProject = (
     name: string,
     category: 'อาหารเสริม' | 'สกินแคร์'
@@ -466,7 +492,7 @@ export default function App() {
     const updated = [newProj, ...projects];
     setProjects(updated);
     queueSave(updated);
-    window.location.hash = isUrlViewOnly ? `p-${newProj.id}&view-only` : `p-${newProj.id}`;
+    setCurrentProjectId(newProj.id);
     showToast(`Created project "${name}"`);
   };
 
@@ -496,7 +522,7 @@ export default function App() {
     const updated = [copy, ...projects];
     setProjects(updated);
     queueSave(updated);
-    window.location.hash = isUrlViewOnly ? `p-${copy.id}&view-only` : `p-${copy.id}`;
+    setCurrentProjectId(copy.id);
     showToast('Project duplicated successfully');
   };
 
@@ -505,7 +531,7 @@ export default function App() {
     const updated = projects.filter((p) => p.id !== id);
     setProjects(updated);
     queueSave(updated);
-    window.location.hash = isUrlViewOnly ? 'view-only' : 'all';
+    setCurrentProjectId(null);
     showToast('Project deleted');
   };
 
@@ -536,7 +562,6 @@ export default function App() {
     showToast('Holidays updated');
   };
 
-  // If not logged in and URL does not request View-Only mode, show Login Screen
   if (!currentUser && !isUrlViewOnly) {
     return (
       <LoginScreen
@@ -548,13 +573,10 @@ export default function App() {
           );
         }}
         onLoginSuccess={(user) => {
-          window.location.hash = 'all';
-          setCurrentProjectId(null);
           setCurrentUser(user);
           showToast(`Welcome back, ${user.displayName || user.username}`);
         }}
         onEnterViewOnly={() => {
-          window.location.hash = 'view-only';
           setIsUrlViewOnly(true);
         }}
       />
@@ -570,6 +592,7 @@ export default function App() {
         onAppLogout={async () => {
           await UserAuthService.logout();
           setCurrentUser(null);
+          setCurrentProjectId(null);
           showToast('Signed out of Project Tracker');
         }}
         onOpenUserManagement={() => setIsUserManagementOpen(true)}
@@ -581,7 +604,6 @@ export default function App() {
         onOpenHolidays={() => setIsHolidayModalOpen(true)}
       />
 
-      {/* แถบเครื่องมือควบคุมการซิงก์ด่วน */}
       <div className="max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pt-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <span className={`inline-block w-2.5 h-2.5 rounded-full ${syncState.isSyncing ? 'bg-amber-400 animate-pulse' : syncState.isSynced ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
@@ -616,12 +638,20 @@ export default function App() {
               isViewOnly={isViewOnly}
               isSharedProjectView={Boolean(sharedProjectId)}
               onBack={() => {
-                window.location.hash = isUrlViewOnly ? 'view-only' : 'all';
+                setCurrentProjectId(null);
               }}
               onUpdateProject={handleUpdateProject}
               onDuplicateProject={handleDuplicateProject}
               onDeleteProject={handleDeleteProject}
             />
+          ) : !isInitialLoadDone ? (
+            /* ระหว่างรอโหลดข้อมูลจาก Google Sheets ครั้งแรก ไม่ให้เด้งหลุด */
+            <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center space-y-3">
+              <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <p className="text-sm text-slate-600 font-bold">
+                กำลังเปิดโปรเจกต์ของคุณ...
+              </p>
+            </div>
           ) : (
             <div className="bg-white p-8 sm:p-12 rounded-3xl border border-slate-200 text-center space-y-3">
               <p className="text-base text-slate-700 font-semibold">
@@ -630,7 +660,7 @@ export default function App() {
               {!sharedProjectId && (
                 <button
                   onClick={() => {
-                    window.location.hash = isUrlViewOnly ? 'view-only' : 'all';
+                    setCurrentProjectId(null);
                   }}
                   className="inline-flex items-center text-xs font-semibold px-4 py-2 bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 transition-colors cursor-pointer"
                 >
@@ -646,7 +676,7 @@ export default function App() {
             costPrivacy={effectiveCostPrivacy}
             isViewOnly={isViewOnly}
             onSelectProject={(id) => {
-              window.location.hash = isUrlViewOnly ? `p-${id}&view-only` : `p-${id}`;
+              setCurrentProjectId(id);
             }}
             onCreateProject={handleCreateProject}
           />
@@ -668,7 +698,7 @@ export default function App() {
         onSaveHolidays={handleSaveHolidays}
       />
 
-      {/* User Management & Roles Modal (Admin Waranya Only) */}
+      {/* User Management & Roles Modal */}
       {isUserManagementOpen && currentUser && (
         <UserManagementModal
           onClose={() => setIsUserManagementOpen(false)}
