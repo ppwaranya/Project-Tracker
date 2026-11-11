@@ -405,12 +405,27 @@ export default function App() {
         setSyncState((prev) => ({
           ...prev,
           isSyncing: false,
+          isSynced: false,
           error: message,
         }));
         showToast(`Could not save to Firebase: ${message}`);
       }
     }, 700);
   };
+
+  useEffect(() => {
+    const retryPendingWrites = () => {
+      if (
+        pendingProjectWritesRef.current.size ||
+        pendingProjectDeletesRef.current.size
+      ) {
+        queueSave([], []);
+      }
+    };
+
+    window.addEventListener('online', retryPendingWrites);
+    return () => window.removeEventListener('online', retryPendingWrites);
+  }, [user]);
 
   // Toggle Cost Privacy
   const handleToggleCostPrivacy = () => {
