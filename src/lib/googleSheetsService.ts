@@ -1,7 +1,7 @@
 import { Holiday, Project } from './types';
 import { norm } from './trackerLogic';
 
-// นำ URL ที่ลงท้ายด้วย /exec จาก Google Apps Script มาวางในเครื่องหมายคำพูดนี้
+// นำ URL ที่ลงท้ายด้วย /exec ของคุณมาใส่ตรงนี้
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbySLdEBAgqzskXBdOKl1Fr5xRupoJqfXpPH2L4V7gWzV7vEgPewCyA36X0rBlKqf6Gs/exec';
 
 const CACHE_KEY_PROJECTS = 'launch_tracker_projects_cache';
@@ -29,35 +29,42 @@ export class GoogleSheetsService {
     return 'google-apps-script';
   }
 
+  // ดึงข้อมูลโครงการ
   static async loadProjects(_accessToken?: string, _sheetId?: string): Promise<Project[]> {
     try {
-      const res = await fetch(`${APPS_SCRIPT_URL}?type=projects`);
+      const res = await fetch(`${APPS_SCRIPT_URL}?type=projects&t=${Date.now()}`);
+      if (!res.ok) throw new Error('Network response was not ok');
       const json = await res.json();
-      if (json.status === 'success' && Array.isArray(json.data) && json.data.length > 0) {
+      if (json && json.status === 'success' && Array.isArray(json.data) && json.data.length > 0) {
         const normalized = json.data.map(norm);
         localStorage.setItem(CACHE_KEY_PROJECTS, JSON.stringify(normalized));
         return normalized;
       }
       return this.getLocalProjects() || [];
-    } catch {
+    } catch (e) {
+      console.warn('Load projects fallback to local:', e);
       return this.getLocalProjects() || [];
     }
   }
 
+  // ดึงข้อมูลวันหยุด
   static async loadHolidays(_accessToken?: string, _sheetId?: string): Promise<Holiday[]> {
     try {
-      const res = await fetch(`${APPS_SCRIPT_URL}?type=holidays`);
+      const res = await fetch(`${APPS_SCRIPT_URL}?type=holidays&t=${Date.now()}`);
+      if (!res.ok) throw new Error('Network response was not ok');
       const json = await res.json();
-      if (json.status === 'success' && Array.isArray(json.data) && json.data.length > 0) {
+      if (json && json.status === 'success' && Array.isArray(json.data) && json.data.length > 0) {
         localStorage.setItem(CACHE_KEY_HOLIDAYS, JSON.stringify(json.data));
         return json.data;
       }
       return this.getLocalHolidays() || [];
-    } catch {
+    } catch (e) {
+      console.warn('Load holidays fallback to local:', e);
       return this.getLocalHolidays() || [];
     }
   }
 
+  // บันทึกโครงการลง Google Sheets
   static async saveAllProjects(
     _accessToken?: string,
     _sheetId?: string,
@@ -66,25 +73,18 @@ export class GoogleSheetsService {
   ): Promise<void> {
     localStorage.setItem(CACHE_KEY_PROJECTS, JSON.stringify(projects));
 
-    // ส่งแบบ text/plain เพื่อเลี่ยงการตรวจ CORS Preflight
-    const res = await fetch(APPS_SCRIPT_URL, {
+    // ใช้ text/plain เพื่อเลี่ยง CORS Preflight และจัดการ Redirect
+    await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
+      mode: 'no-cors', // สำคัญมาก: ป้องกันไม่ให้เบราว์เซอร์ค้างหรือติด CORS กับ Apps Script
       headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
+        'Content-Type': 'text/plain',
       },
       body: JSON.stringify({ type: 'projects', data: projects }),
     });
-
-    if (!res.ok) {
-      throw new Error(`Server status: ${res.status}`);
-    }
-
-    const json = await res.json();
-    if (json.status !== 'success') {
-      throw new Error(json.message || 'Failed to save to Google Sheets');
-    }
   }
 
+  // บันทึกวันหยุดลง Google Sheets
   static async saveHolidays(
     _accessToken?: string,
     _sheetId?: string,
@@ -92,22 +92,14 @@ export class GoogleSheetsService {
   ): Promise<void> {
     localStorage.setItem(CACHE_KEY_HOLIDAYS, JSON.stringify(holidays));
 
-    const res = await fetch(APPS_SCRIPT_URL, {
+    await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
+      mode: 'no-cors',
       headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
+        'Content-Type': 'text/plain',
       },
       body: JSON.stringify({ type: 'holidays', data: holidays }),
     });
-
-    if (!res.ok) {
-      throw new Error(`Server status: ${res.status}`);
-    }
-
-    const json = await res.json();
-    if (json.status !== 'success') {
-      throw new Error(json.message || 'Failed to save holidays to Google Sheets');
-    }
   }
 
   static getLocalProjects(): Project[] | null {
