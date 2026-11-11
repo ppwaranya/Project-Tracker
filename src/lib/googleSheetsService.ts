@@ -2,7 +2,7 @@ import { Holiday, Project } from './types';
 import { norm } from './trackerLogic';
 
 // นำ URL ที่ลงท้ายด้วย /exec จาก Google Apps Script มาวางในเครื่องหมายคำพูดนี้
-const APPS_SCRIPT_URL = 'วาง_URL_ของ_GOOGLE_APPS_SCRIPT_ที่นี่';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbySLdEBAgqzskXBdOKl1Fr5xRupoJqfXpPH2L4V7gWzV7vEgPewCyA36X0rBlKqf6Gs/exec';
 
 const CACHE_KEY_PROJECTS = 'launch_tracker_projects_cache';
 const CACHE_KEY_HOLIDAYS = 'launch_tracker_holidays_cache';
