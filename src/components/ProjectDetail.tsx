@@ -55,6 +55,7 @@ import {
   Lock,
   ChevronDown,
   ChevronRight,
+  Pencil,
 } from 'lucide-react';
 
 interface ProjectDetailProps {
@@ -121,29 +122,36 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const panelToggle = (panelId: string) => {
     const isCollapsed = collapsedPanels.has(panelId);
     const label = isCollapsed ? 'Expand section' : 'Collapse section';
+    const togglePanel = () =>
+      setCollapsedPanels((current) => {
+        const next = new Set(current);
+        if (next.has(panelId)) next.delete(panelId);
+        else next.add(panelId);
+        return next;
+      });
 
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         aria-label={label}
         aria-expanded={!isCollapsed}
         title={label}
-        onClick={() =>
-          setCollapsedPanels((current) => {
-            const next = new Set(current);
-            if (next.has(panelId)) next.delete(panelId);
-            else next.add(panelId);
-            return next;
-          })
-        }
-        className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+        onClick={togglePanel}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            togglePanel();
+          }
+        }}
+        className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
       >
         {isCollapsed ? (
           <ChevronRight className="h-4 w-4" />
         ) : (
           <ChevronDown className="h-4 w-4" />
         )}
-      </button>
+      </div>
     );
   };
 
@@ -151,6 +159,34 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     if (isViewOnly || editingSection !== null) return;
     setDraftProject(JSON.parse(JSON.stringify(savedProject)) as Project);
     setEditingSection(section);
+  };
+
+  const panelEditButton = (section: TabKey) => {
+    if (isViewOnly) return null;
+    const isDisabled = editingSection !== null;
+
+    return (
+      <div
+        role="button"
+        tabIndex={isDisabled ? -1 : 0}
+        aria-disabled={isDisabled}
+        onClick={() => beginEdit(section)}
+        onKeyDown={(event) => {
+          if (!isDisabled && (event.key === 'Enter' || event.key === ' ')) {
+            event.preventDefault();
+            beginEdit(section);
+          }
+        }}
+        className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold ${
+          isDisabled
+            ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
+            : 'cursor-pointer border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+        }`}
+      >
+        <Pencil className="h-3.5 w-3.5" />
+        <span>Edit</span>
+      </div>
+    );
   };
 
   const saveEdits = () => {
@@ -673,11 +709,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           <fieldset disabled={!canEdit('overview')} className="contents">
           {/* Section 1: Specifications & FDA Licensing */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
-              <Info className="w-4 h-4 text-teal-600" />
-              <span>Project Specifications & Regulatory Registration</span>
-              {panelToggle('overview-specifications')}
-            </h3>
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2">
+              <h3 className="flex min-w-0 items-center gap-2 text-sm font-bold text-slate-900">
+                <Info className="h-4 w-4 shrink-0 text-teal-600" />
+                <span>Project Specifications & Regulatory Registration</span>
+              </h3>
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                {panelEditButton('overview')}
+                {panelToggle('overview-specifications')}
+              </div>
+            </div>
 
             <div
               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
@@ -814,7 +855,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <span className="text-[11px] text-slate-400 font-medium">
                 Benchmark sensory, texture, taste, packaging & pricing against market competitors
               </span>
-              {panelToggle('overview-benchmark')}
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                {panelEditButton('overview')}
+                {panelToggle('overview-benchmark')}
+              </div>
             </div>
 
             <div
@@ -987,9 +1031,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
           {/* Section 3: USP & Marketing Claims */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-3">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              <span>Unique Selling Proposition (USP) & Marketing Claims</span>
+            <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+              <Sparkles className="h-4 w-4 shrink-0 text-amber-500" />
+              <span className="min-w-0 flex-1">Unique Selling Proposition (USP) & Marketing Claims</span>
+              {panelEditButton('overview')}
               {panelToggle('overview-usp')}
             </h3>
             <textarea
@@ -1011,8 +1056,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </h3>
               </div>
 
-              <div className="flex items-center gap-2">
-                {panelToggle('overview-ingredients')}
+              <div className="ml-auto flex items-center gap-2">
                 <button
                   onClick={() => setShowPasteArea(!showPasteArea)}
                   className="text-xs font-bold text-slate-600 hover:text-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
@@ -1033,6 +1077,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Ingredient</span>
                 </button>
+                {panelEditButton('overview')}
+                {panelToggle('overview-ingredients')}
               </div>
             </div>
 
@@ -1183,28 +1229,31 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </h3>
               </div>
 
-              <button
-                onClick={() =>
-                  update({
-                    tests: [
-                      ...project.tests,
-                      {
-                        id: uid(),
-                        name: '',
-                        lab: '',
-                        date: '',
-                        status: 'ยังไม่ส่ง',
-                        note: '',
-                      },
-                    ],
-                  })
-                }
-                className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Lab Test</span>
-              </button>
-              {panelToggle('overview-tests')}
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                <button
+                  onClick={() =>
+                    update({
+                      tests: [
+                        ...project.tests,
+                        {
+                          id: uid(),
+                          name: '',
+                          lab: '',
+                          date: '',
+                          status: 'ยังไม่ส่ง',
+                          note: '',
+                        },
+                      ],
+                    })
+                  }
+                  className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Lab Test</span>
+                </button>
+                {panelEditButton('overview')}
+                {panelToggle('overview-tests')}
+              </div>
             </div>
 
             <div
@@ -1376,29 +1425,32 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </h3>
               </div>
 
-              <button
-                onClick={() =>
-                  update({
-                    regulatory: [
-                      ...(project.regulatory || []),
-                      {
-                        id: uid(),
-                        name: '',
-                        agency: 'Thai FDA',
-                        submissionDate: '',
-                        licenseNo: '',
-                        status: 'รอเตรียมเอกสาร',
-                        note: '',
-                      },
-                    ],
-                  })
-                }
-                className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Permit</span>
-              </button>
-              {panelToggle('overview-permits')}
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                <button
+                  onClick={() =>
+                    update({
+                      regulatory: [
+                        ...(project.regulatory || []),
+                        {
+                          id: uid(),
+                          name: '',
+                          agency: 'Thai FDA',
+                          submissionDate: '',
+                          licenseNo: '',
+                          status: 'รอเตรียมเอกสาร',
+                          note: '',
+                        },
+                      ],
+                    })
+                  }
+                  className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Permit</span>
+                </button>
+                {panelEditButton('overview')}
+                {panelToggle('overview-permits')}
+              </div>
             </div>
 
             <div
@@ -1646,6 +1698,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 >
                   {showFormulaComparison ? 'Hide Comparison' : 'Compare Selected'}
                 </button>
+                {panelEditButton('formula')}
                 {panelToggle('formula-comparison')}
               </div>
             </div>
@@ -1784,6 +1837,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         Compare
                       </label>
                       <strong className="flex-1 text-xs">{f.ver} {f.code || ''}</strong>
+                      {panelEditButton('formula')}
                       {panelToggle(`formula-${f.id}`)}
                     </div>
                     <div hidden={collapsedPanels.has(`formula-${f.id}`)}>
@@ -2618,6 +2672,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       >
                         ×
                       </button>
+                      {panelEditButton('packaging')}
                       {panelToggle(packagePanelId)}
                     </div>
 
@@ -3011,15 +3066,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             {tabEditActions}
             <fieldset disabled={!canEdit('cost')} className="contents">
             <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-              <h3 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center justify-between font-heading">
+              <h3 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2 font-heading">
                 <span>Cost & Budget Analysis</span>
-                {panelToggle('cost-summary')}
                 {costPrivacy && (
                   <span className="text-xs font-bold text-amber-900 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 flex items-center gap-1.5">
                     <EyeOff className="w-3.5 h-3.5" />
                     <span>Presentation Mode Active</span>
                   </span>
                 )}
+                <span className="ml-auto flex items-center gap-2">
+                  {panelEditButton('cost')}
+                  {panelToggle('cost-summary')}
+                </span>
               </h3>
 
             <div hidden={collapsedPanels.has('cost-summary')}>
@@ -3043,29 +3101,32 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </p>
               </div>
 
-              <button
-                onClick={() =>
-                  update({
-                    other: [
-                      ...project.other,
-                      {
-                        id: uid(),
-                        name: '',
-                        unit: 'Piece',
-                        amount: '',
-                        times: '',
-                        note: '',
-                        vatIncluded: false,
-                      },
-                    ],
-                  })
-                }
-                className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Expense Item</span>
-              </button>
-              {panelToggle('cost-other')}
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                <button
+                  onClick={() =>
+                    update({
+                      other: [
+                        ...project.other,
+                        {
+                          id: uid(),
+                          name: '',
+                          unit: 'Piece',
+                          amount: '',
+                          times: '',
+                          note: '',
+                          vatIncluded: false,
+                        },
+                      ],
+                    })
+                  }
+                  className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Expense Item</span>
+                </button>
+                {panelEditButton('cost')}
+                {panelToggle('cost-other')}
+              </div>
             </div>
 
             <div
@@ -3260,8 +3321,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           {/* Timeline Summary Metrics */}
           {!isViewOnly && (
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-3">
-            <h3 className="text-base font-bold text-slate-900 font-heading">
-              Timeline Milestones & Delivery Schedule
+            <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 font-heading">
+              <span className="min-w-0 flex-1">Timeline Milestones & Delivery Schedule</span>
+              {panelEditButton('timeline')}
               {panelToggle('timeline-summary')}
             </h3>
 
@@ -3318,8 +3380,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
           {/* Collapsible Gantt Chart Section */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-            <h3 className="text-base font-bold text-slate-900 font-heading">
-              Weekly Gantt Chart
+            <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 font-heading">
+              <span className="min-w-0 flex-1">Weekly Gantt Chart</span>
+              {panelEditButton('timeline')}
               {panelToggle('timeline-gantt')}
             </h3>
             <div hidden={collapsedPanels.has('timeline-gantt')}>
@@ -3340,7 +3403,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   Modifying working days or dependencies dynamically reschedules downstream phases
                 </p>
               </div>
-              {panelToggle('timeline-schedule')}
+              <div className="ml-auto flex items-center gap-2">
+                {panelEditButton('timeline')}
+                {panelToggle('timeline-schedule')}
+              </div>
             </div>
 
             <div
@@ -3604,7 +3670,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   Attach links to certificates, test reports, artwork files, and contracts.
                 </p>
               </div>
-              {panelToggle('docs-upload')}
+              <div className="ml-auto flex items-center gap-2">
+                {panelEditButton('docs')}
+                {panelToggle('docs-upload')}
+              </div>
             </div>
 
             {/* External Link Input Form */}
@@ -3669,9 +3738,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
           {/* Documents Table */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <span>Attached Documents ({project.docs.length})</span>
-              {panelToggle('docs-list')}
+              <span className="ml-auto flex items-center gap-2">
+                {panelEditButton('docs')}
+                {panelToggle('docs-list')}
+              </span>
             </h3>
 
             <div
