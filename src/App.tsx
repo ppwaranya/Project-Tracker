@@ -349,7 +349,7 @@ export default function App() {
   useEffect(() => {
     const interval = setInterval(() => {
       syncWithGoogleSheets();
-    }, 10000);
+    }, 5000);
 
     const onFocus = () => {
       syncWithGoogleSheets();
