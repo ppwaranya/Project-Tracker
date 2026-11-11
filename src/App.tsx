@@ -517,6 +517,8 @@ export default function App() {
           );
         }}
         onLoginSuccess={(user) => {
+          window.location.hash = 'all';
+          setCurrentProjectId(null);
           setCurrentUser(user);
           showToast(`Welcome back, ${user.displayName || user.username}`);
         }}

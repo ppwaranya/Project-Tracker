@@ -94,6 +94,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [ingPasteText, setIngPasteText] = useState('');
   const [showPasteArea, setShowPasteArea] = useState(false);
 
+  const splitIngredientAmount = (amount: string, unit?: string) => {
+    if (unit?.trim()) return { amount, unit };
+    const match = amount.match(
+      /^\s*([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?|[+-]?\.\d+)\s*(.*?)\s*$/
+    );
+    return match
+      ? { amount: match[1], unit: match[2] }
+      : { amount, unit: '' };
+  };
+
   // Calculations
   const cs = compute(project, holidaysSet);
   const co = costOf(project);
@@ -224,10 +234,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       const trimmed = l.trim();
       if (!trimmed) return;
       const parts = trimmed.split(/\t|,/);
+      const { amount, unit } = splitIngredientAmount((parts[1] || '').trim());
       newItems.push({
         id: uid(),
         name: (parts[0] || '').trim(),
-        amount: (parts[1] || '').trim(),
+        amount,
+        unit,
         note: parts.slice(2).join(', ').trim(),
       });
     });
@@ -887,7 +899,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     update({
                       ingredients: [
                         ...project.ingredients,
-                        { id: uid(), name: '', amount: '', note: '' },
+                        { id: uid(), name: '', amount: '', unit: '', note: '' },
                       ],
                     })
                   }
@@ -955,17 +967,49 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           />
                         </td>
                         <td className="p-2">
-                          <input
-                            type="text"
-                            value={it.amount}
-                            onChange={(e) => {
-                              const copy = [...project.ingredients];
-                              copy[idx].amount = e.target.value;
-                              update({ ingredients: copy });
-                            }}
-                            placeholder=""
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
-                          />
+                          <div className="flex gap-1.5">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={splitIngredientAmount(it.amount, it.unit).amount}
+                              onChange={(e) => {
+                                const copy = [...project.ingredients];
+                                const { unit } = splitIngredientAmount(
+                                  copy[idx].amount,
+                                  copy[idx].unit
+                                );
+                                copy[idx] = {
+                                  ...copy[idx],
+                                  amount: e.target.value,
+                                  unit,
+                                };
+                                update({ ingredients: copy });
+                              }}
+                              placeholder="300"
+                              aria-label="Amount"
+                              className="w-2/3 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
+                            />
+                            <input
+                              type="text"
+                              value={splitIngredientAmount(it.amount, it.unit).unit}
+                              onChange={(e) => {
+                                const copy = [...project.ingredients];
+                                const { amount } = splitIngredientAmount(
+                                  copy[idx].amount,
+                                  copy[idx].unit
+                                );
+                                copy[idx] = {
+                                  ...copy[idx],
+                                  amount,
+                                  unit: e.target.value,
+                                };
+                                update({ ingredients: copy });
+                              }}
+                              placeholder="mg / g / %"
+                              aria-label="Unit"
+                              className="w-1/3 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
+                            />
+                          </div>
                         </td>
                         <td className="p-2">
                           <input
@@ -1878,7 +1922,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   const imported = project.ingredients.map((ing) => ({
                                     id: uid(),
                                     name: ing.name,
-                                    amount: ing.amount,
+                                    ...splitIngredientAmount(ing.amount, ing.unit),
                                     note: ing.note,
                                   }));
                                   const newFs = project.formulas.map((x) =>
@@ -1906,6 +1950,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   id: uid(),
                                   name: '',
                                   amount: '',
+                                  unit: '',
                                   note: '',
                                 };
                                 const newFs = project.formulas.map((x) =>
@@ -1935,7 +1980,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           <thead>
                             <tr className="bg-slate-100/80 text-slate-600 font-bold border-b border-slate-200 text-[11px]">
                               <th className="py-2 px-3">Active / Component</th>
-                              <th className="py-2 px-3 w-36">Dosage / Ratio</th>
+                              <th className="py-2 px-3 w-52">Amount / Unit</th>
                               <th className="py-2 px-3">Function / Notes</th>
                               {!isViewOnly && (
                                 <th className="py-2 px-2 w-8 text-center"></th>
@@ -1980,25 +2025,59 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     />
                                   </td>
                                   <td className="p-1.5">
-                                    <input
-                                      type="text"
-                                      disabled={isViewOnly}
-                                      value={ing.amount}
-                                      onChange={(e) => {
-                                        const newFs = project.formulas.map((x) => {
-                                          if (x.id !== f.id) return x;
-                                          const copy = [...(x.ingredients || [])];
-                                          copy[ingIdx] = {
-                                            ...copy[ingIdx],
-                                            amount: e.target.value,
-                                          };
-                                          return { ...x, ingredients: copy };
-                                        });
-                                        update({ formulas: newFs });
-                                      }}
-                                      placeholder=""
-                                      className="w-full px-2 py-1 rounded-lg border border-slate-200 bg-white font-medium text-xs"
-                                    />
+                                    <div className="flex gap-1">
+                                      <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        disabled={isViewOnly}
+                                        value={splitIngredientAmount(ing.amount, ing.unit).amount}
+                                        onChange={(e) => {
+                                          const newFs = project.formulas.map((x) => {
+                                            if (x.id !== f.id) return x;
+                                            const copy = [...(x.ingredients || [])];
+                                            const { unit } = splitIngredientAmount(
+                                              copy[ingIdx].amount,
+                                              copy[ingIdx].unit
+                                            );
+                                            copy[ingIdx] = {
+                                              ...copy[ingIdx],
+                                              amount: e.target.value,
+                                              unit,
+                                            };
+                                            return { ...x, ingredients: copy };
+                                          });
+                                          update({ formulas: newFs });
+                                        }}
+                                        placeholder="300"
+                                        aria-label="Amount"
+                                        className="w-2/3 min-w-0 px-2 py-1 rounded-lg border border-slate-200 bg-white font-medium text-xs"
+                                      />
+                                      <input
+                                        type="text"
+                                        disabled={isViewOnly}
+                                        value={splitIngredientAmount(ing.amount, ing.unit).unit}
+                                        onChange={(e) => {
+                                          const newFs = project.formulas.map((x) => {
+                                            if (x.id !== f.id) return x;
+                                            const copy = [...(x.ingredients || [])];
+                                            const { amount } = splitIngredientAmount(
+                                              copy[ingIdx].amount,
+                                              copy[ingIdx].unit
+                                            );
+                                            copy[ingIdx] = {
+                                              ...copy[ingIdx],
+                                              amount,
+                                              unit: e.target.value,
+                                            };
+                                            return { ...x, ingredients: copy };
+                                          });
+                                          update({ formulas: newFs });
+                                        }}
+                                        placeholder="mg / g / %"
+                                        aria-label="Unit"
+                                        className="w-1/3 min-w-0 px-2 py-1 rounded-lg border border-slate-200 bg-white text-xs"
+                                      />
+                                    </div>
                                   </td>
                                   <td className="p-1.5">
                                     <input
