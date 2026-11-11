@@ -258,6 +258,32 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     onUpdateProject(updated);
   };
 
+  // ฟังก์ชันบันทึกภาพ Formulation ขึ้น Google Sheets ทันที (เลียนแบบ Benchmark 100%)
+  const saveFormulaImagesImmediately = (formulaId: string, newImages: string[]) => {
+    if (isViewOnly) return;
+    const base = JSON.parse(JSON.stringify(draftProject || savedProject)) as Project;
+    base.formulas = (base.formulas || []).map((f) =>
+      f.id === formulaId ? { ...f, images: newImages } : f
+    );
+    base.updatedAt = Date.now();
+    base.rev = (base.rev || 0) + 1;
+    if (draftProject) setDraftProject(base);
+    onUpdateProject(base);
+  };
+
+  // ฟังก์ชันบันทึกภาพ Packaging ขึ้น Google Sheets ทันที (เลียนแบบ Benchmark 100%)
+  const savePackagingImagesImmediately = (packageId: string, newImages: string[]) => {
+    if (isViewOnly) return;
+    const base = JSON.parse(JSON.stringify(draftProject || savedProject)) as Project;
+    base.packaging = (base.packaging || []).map((p) =>
+      p.id === packageId ? { ...p, images: newImages } : p
+    );
+    base.updatedAt = Date.now();
+    base.rev = (base.rev || 0) + 1;
+    if (draftProject) setDraftProject(base);
+    onUpdateProject(base);
+  };
+
   const handleDuplicate = () => {
     onDuplicateProject(project);
   };
@@ -2012,7 +2038,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           />
                         </div>
 
-                        {/* กล่องอัปโหลดภาพ Formulation ปรับให้บันทึกทันทีด้วย updateImmediately */}
+                        {/* กล่องอัปโหลดภาพ Formulation: เชื่อมต่อ saveFormulaImagesImmediately บันทึกตรงแบบ Benchmark */}
                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -2034,12 +2060,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     handleMultipleImageUpload(
                                       e,
                                       f.images || [],
-                                      (newImgs) => {
-                                        const newFs = project.formulas.map((x) =>
-                                          x.id === f.id ? { ...x, images: newImgs } : x
-                                        );
-                                        updateImmediately({ formulas: newFs });
-                                      }
+                                      (newImgs) => saveFormulaImagesImmediately(f.id, newImgs)
                                     )
                                   }
                                   className="hidden"
@@ -2088,10 +2109,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                         const newImgs = (f.images || []).filter(
                                           (_, idx) => idx !== imgIdx
                                         );
-                                        const newFs = project.formulas.map((x) =>
-                                          x.id === f.id ? { ...x, images: newImgs } : x
-                                        );
-                                        updateImmediately({ formulas: newFs });
+                                        saveFormulaImagesImmediately(f.id, newImgs);
                                       }}
                                       className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                     >
@@ -2929,7 +2947,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         )}
                       </div>
 
-                      {/* กล่องอัปโหลดภาพ Packaging ปรับให้บันทึกทันทีด้วย updateImmediately */}
+                      {/* กล่องอัปโหลดภาพ Packaging: เชื่อมต่อ savePackagingImagesImmediately บันทึกตรงแบบ Benchmark */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <label className="block text-xs font-bold text-slate-700">
@@ -2950,12 +2968,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   handleMultipleImageUpload(
                                     e,
                                     it.images || [],
-                                    (newImgs) => {
-                                      const copy = project.packaging.map((x) =>
-                                        x.id === it.id ? { ...x, images: newImgs } : x
-                                      );
-                                      updateImmediately({ packaging: copy });
-                                    }
+                                    (newImgs) => savePackagingImagesImmediately(it.id, newImgs)
                                   )
                                 }
                                 className="hidden"
@@ -3005,10 +3018,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                       const newImgs = (it.images || []).filter(
                                         (_, idx) => idx !== imgIdx
                                       );
-                                      const copy = project.packaging.map((x) =>
-                                        x.id === it.id ? { ...x, images: newImgs } : x
-                                      );
-                                      updateImmediately({ packaging: copy });
+                                      savePackagingImagesImmediately(it.id, newImgs);
                                     }}
                                     className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                   >
