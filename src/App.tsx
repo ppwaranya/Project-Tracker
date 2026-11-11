@@ -7,7 +7,7 @@ import {
   todayISO,
   uid,
 } from './lib/trackerLogic';
-import { FirebaseDataService, SyncState } from './lib/firebaseDataService';
+import { GoogleSheetsService, SyncState } from './lib/googleSheetsService';
 import { initAuth } from './lib/auth';
 import { UserAuthService } from './lib/userAuthService';
 import { Header } from './components/Header';
@@ -20,7 +20,6 @@ import { UserManagementModal } from './components/UserManagementModal';
 const getSharedProjectId = (hash: string): string | null => {
   return hash.match(/^#?view\/([^&]+)/)?.[1] || null;
 };
-const FIREBASE_SYNC_TIMEOUT_MS = 15_000;
 
 // Sample demo project for fresh users
 const createSampleProject = (): Project => {
@@ -224,14 +223,14 @@ export default function App() {
 
   // Projects & Holidays State
   const [projects, setProjects] = useState<Project[]>(() => {
-    const cached = FirebaseDataService.getLocalProjects();
-    if (cached) return cached;
+    const cached = GoogleSheetsService.getLocalProjects();
+    if (cached && cached.length > 0) return cached;
     return [createSampleProject()];
   });
 
   const [holidays, setHolidays] = useState<Holiday[]>(() => {
-    const cached = FirebaseDataService.getLocalHolidays();
-    if (cached) return cached;
+    const cached = GoogleSheetsService.getLocalHolidays();
+    if (cached && cached.length > 0) return cached;
     return DEFAULT_HOLIDAYS;
   });
 
@@ -240,6 +239,8 @@ export default function App() {
     isSynced: false,
     isSyncing: false,
     lastSyncedAt: null,
+    spreadsheetId: GoogleSheetsService.getSpreadsheetId(),
+    spreadsheetUrl: GoogleSheetsService.getSpreadsheetUrl(),
     error: null,
   });
 
@@ -274,71 +275,61 @@ export default function App() {
 
   // Debounced autosave ref
   const saveTimerRef = useRef<any>(null);
-  const pendingProjectWritesRef = useRef<Map<string, Project>>(new Map());
-  const pendingProjectDeletesRef = useRef<Set<string>>(new Set());
-  const pendingHolidayWriteRef = useRef<Holiday[] | null>(null);
+  const isDirtyRef = useRef(false);
 
-// ซิงก์ข้อมูลจาก Google Sheets ทันทีที่เปิดหน้าเว็บ
+  // ดึงข้อมูลโครงการและวันหยุดจาก Google Sheets
+  const syncWithGoogleSheets = async () => {
+    setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
+    try {
+      const remoteProjects = await GoogleSheetsService.loadProjects();
+      const remoteHolidays = await GoogleSheetsService.loadHolidays();
+
+      if (remoteProjects && remoteProjects.length > 0) {
+        setProjects(remoteProjects);
+      }
+      if (remoteHolidays && remoteHolidays.length > 0) {
+        setHolidays(remoteHolidays);
+      }
+
+      setSyncState((prev) => ({
+        ...prev,
+        isSynced: true,
+        isSyncing: false,
+        lastSyncedAt: new Date(),
+        error: null,
+      }));
+    } catch (err: any) {
+      setSyncState((prev) => ({
+        ...prev,
+        isSyncing: false,
+        error: err?.message || 'Sync failed',
+      }));
+    }
+  };
+
+  // ซิงก์ข้อมูลทันทีเมื่อเปิดหน้าเว็บ
   useEffect(() => {
-    triggerInitialSheetsSync('direct-apps-script');
+    syncWithGoogleSheets();
   }, []);
 
+  // วนรอบดึงข้อมูลใหม่ทุก 30 วินาที และเมื่อสลับหน้าจอกลับมา
   useEffect(() => {
-    const handleError = (error: Error) => {
-      console.error('Firebase data listener failed:', error);
-      setSyncState((prev) => ({
-        ...prev,
-        isSynced: false,
-        error: error.message,
-      }));
-    };
-    const markConnected = () => {
-      const hasPendingWrites =
-        pendingProjectWritesRef.current.size > 0 ||
-        pendingProjectDeletesRef.current.size > 0 ||
-        pendingHolidayWriteRef.current !== null;
-      setSyncState((prev) => ({
-        ...prev,
-        isSynced: hasPendingWrites ? prev.isSynced : true,
-        lastSyncedAt: hasPendingWrites ? prev.lastSyncedAt : new Date(),
-        error: hasPendingWrites ? prev.error : null,
-      }));
+    const interval = setInterval(() => {
+      if (!isDirtyRef.current) {
+        syncWithGoogleSheets();
+      }
+    }, 30000);
+
+    const onFocus = () => {
+      if (!isDirtyRef.current) {
+        syncWithGoogleSheets();
+      }
     };
 
-    const unsubscribeProjects = FirebaseDataService.subscribeToProjects(
-      (remoteProjects) => {
-        const mergedProjects = new Map(
-          remoteProjects.map((project) => [project.id, project])
-        );
-        for (const id of pendingProjectDeletesRef.current) {
-          mergedProjects.delete(id);
-        }
-        for (const [id, project] of pendingProjectWritesRef.current) {
-          mergedProjects.set(id, project);
-        }
-        const visibleProjects = [...mergedProjects.values()].sort(
-          (a, b) => b.createdAt - a.createdAt
-        );
-        FirebaseDataService.cacheProjects(visibleProjects);
-        setProjects(visibleProjects);
-        markConnected();
-      },
-      handleError
-    );
-    const unsubscribeHolidays = FirebaseDataService.subscribeToHolidays(
-      (remoteHolidays) => {
-        const visibleHolidays =
-          pendingHolidayWriteRef.current ??
-          (remoteHolidays.length ? remoteHolidays : DEFAULT_HOLIDAYS);
-        FirebaseDataService.cacheHolidays(visibleHolidays);
-        setHolidays(visibleHolidays);
-        markConnected();
-      },
-      handleError
-    );
+    window.addEventListener('focus', onFocus);
     return () => {
-      unsubscribeProjects();
-      unsubscribeHolidays();
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
     };
   }, []);
 
@@ -361,7 +352,7 @@ export default function App() {
         } else if (hash.startsWith('p-')) {
           setCurrentProjectId(hash.slice(2));
         } else {
-        setCurrentProjectId(null);
+          setCurrentProjectId(null);
         }
       }
       window.scrollTo(0, 0);
@@ -371,36 +362,21 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [sharedProjectId]);
 
-  const queueSave = (projectsToSave: Project[], deletedIds: string[] = []) => {
-    for (const project of projectsToSave) {
-      pendingProjectWritesRef.current.set(project.id, project);
-      pendingProjectDeletesRef.current.delete(project.id);
-    }
-    for (const id of deletedIds) {
-      pendingProjectWritesRef.current.delete(id);
-      pendingProjectDeletesRef.current.add(id);
-    }
-
+  // ฟังก์ชัน Autosave ส่งตรงเข้า Google Sheets
+  const queueSave = (newProjects: Project[]) => {
+    isDirtyRef.current = true;
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      const upserts = [...pendingProjectWritesRef.current.values()];
-      const deletes = [...pendingProjectDeletesRef.current];
-      if (!upserts.length && !deletes.length) return;
-
+      isDirtyRef.current = false;
       setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
 
       try {
-        // ดึงรายการโครงการทั้งหมดล่าสุดเพื่อเซฟลง Google Sheets
-        const currentProjects = projects;
         await GoogleSheetsService.saveAllProjects(
           'apps-script',
           'google-apps-script',
-          currentProjects,
+          newProjects,
           holidaysSet
         );
-
-        pendingProjectWritesRef.current.clear();
-        pendingProjectDeletesRef.current.clear();
 
         setSyncState((prev) => ({
           ...prev,
@@ -423,20 +399,6 @@ export default function App() {
     }, 700);
   };
 
-  useEffect(() => {
-    const retryPendingWrites = () => {
-      if (
-        pendingProjectWritesRef.current.size ||
-        pendingProjectDeletesRef.current.size
-      ) {
-        queueSave([], []);
-      }
-    };
-
-    window.addEventListener('online', retryPendingWrites);
-    return () => window.removeEventListener('online', retryPendingWrites);
-  }, []);
-
   // Toggle Cost Privacy
   const handleToggleCostPrivacy = () => {
     if (isViewOnly) {
@@ -456,12 +418,11 @@ export default function App() {
   const isViewOnly = Boolean(isUrlViewOnly || currentUser?.role === 'Viewer');
   const effectiveCostPrivacy = isViewOnly ? true : costPrivacy;
 
-  const canWriteToFirebase = () => {
+  const canWrite = () => {
     if (isViewOnly) {
       showToast('Action not allowed in View-Only mode');
       return false;
     }
-    // ตัดการเช็ก if (!user) ออก เพื่อให้บันทึกลง Google Sheets ได้ตลอดเวลา
     return true;
   };
 
@@ -470,25 +431,25 @@ export default function App() {
     name: string,
     category: 'อาหารเสริม' | 'สกินแคร์'
   ) => {
-    if (!canWriteToFirebase()) return;
+    if (!canWrite()) return;
     const newProj = makeProject(category);
     newProj.name = name;
     const updated = [newProj, ...projects];
     setProjects(updated);
-    queueSave([newProj]);
+    queueSave(updated);
     window.location.hash = isUrlViewOnly ? `p-${newProj.id}&view-only` : `p-${newProj.id}`;
     showToast(`Created project "${name}"`);
   };
 
   const handleUpdateProject = (updated: Project) => {
-    if (!canWriteToFirebase()) return;
+    if (!canWrite()) return;
     const next = projects.map((p) => (p.id === updated.id ? updated : p));
     setProjects(next);
-    queueSave([updated]);
+    queueSave(next);
   };
 
   const handleDuplicateProject = (orig: Project) => {
-    if (!canWriteToFirebase()) return;
+    if (!canWrite()) return;
     const copy = JSON.parse(JSON.stringify(orig)) as Project;
     copy.id = uid();
     copy.name = `${copy.name || 'Project'} (สำเนา)`;
@@ -505,57 +466,43 @@ export default function App() {
 
     const updated = [copy, ...projects];
     setProjects(updated);
-    queueSave([copy]);
+    queueSave(updated);
     window.location.hash = isUrlViewOnly ? `p-${copy.id}&view-only` : `p-${copy.id}`;
     showToast('Project duplicated successfully');
   };
 
   const handleDeleteProject = (id: string) => {
-    if (!canWriteToFirebase()) return;
+    if (!canWrite()) return;
     const updated = projects.filter((p) => p.id !== id);
     setProjects(updated);
-    queueSave([], [id]);
+    queueSave(updated);
     window.location.hash = isUrlViewOnly ? 'view-only' : 'all';
     showToast('Project deleted');
   };
 
   const handleSaveHolidays = async (newHolidays: Holiday[]) => {
-    if (!canWriteToFirebase()) return;
-    pendingHolidayWriteRef.current = newHolidays;
+    if (!canWrite()) return;
     setHolidays(newHolidays);
     setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
-    const syncTimeout = window.setTimeout(() => {
-      setSyncState((prev) => ({
-        ...prev,
-        isSyncing: false,
-        isSynced: false,
-        error: 'Firebase has not confirmed the save. Changes remain queued.',
-      }));
-    }, FIREBASE_SYNC_TIMEOUT_MS);
     try {
-      await FirebaseDataService.saveHolidays(newHolidays);
-      if (pendingHolidayWriteRef.current === newHolidays) {
-        pendingHolidayWriteRef.current = null;
-      }
+      await GoogleSheetsService.saveHolidays('apps-script', 'google-apps-script', newHolidays);
       setSyncState((prev) => ({
         ...prev,
         isSyncing: false,
         isSynced: true,
         lastSyncedAt: new Date(),
+        error: null,
       }));
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Holiday save failed';
-      console.error('Failed to save holidays to Firebase:', error);
       setSyncState((prev) => ({
         ...prev,
         isSyncing: false,
         error: message,
       }));
-      showToast(`Could not save holidays to Firebase: ${message}`);
+      showToast(`Could not save holidays: ${message}`);
       return;
-    } finally {
-      clearTimeout(syncTimeout);
     }
     showToast('Holidays updated');
   };
