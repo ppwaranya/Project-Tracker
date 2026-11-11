@@ -197,7 +197,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   };
 
   const panelActions = (panelId: string, collapsible = true) => (
-    <div className="ml-auto flex shrink-0 items-center gap-2">
+    <div className="flex shrink-0 items-center gap-2">
       {!isViewOnly && (editingPanel === panelId ? (
         <>
           {runPanelAction(
@@ -242,7 +242,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     );
   };
 
-  // Direct updater for immediate image uploads/deletions without manual edit mode
+  // บันทึกข้อมูลและสั่ง sync ทันที
   const updateImmediately = (partial: Partial<Project>) => {
     if (isViewOnly) return;
     const base = draftProject || savedProject;
@@ -387,7 +387,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     setShowPasteArea(false);
   };
 
-  // Multiple Image Upload Helper พร้อมบีบอัดภาพให้อยู่ในโควตา Google Sheets อัตโนมัติ
   const handleMultipleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     currentImages: string[],
@@ -431,7 +430,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       isConfirmed: false,
     };
 
-    update({
+    updateImmediately({
       formulas: [...project.formulas, newFormula],
       chosenFormula: newFormula.id,
     });
@@ -448,6 +447,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Top Header */}
       <div
         className={`rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden ${
           displayCategory(project.category) === 'Dietary Supplement'
@@ -592,6 +592,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </div>
       </div>
 
+      {/* KPI Summary Banner */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-[#eee8ff] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#ded5fc] shadow-2xs flex flex-col justify-between">
           <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4d3b94] block mb-1">
@@ -661,6 +662,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </div>
       </div>
 
+      {/* Tabs Navigation */}
       <div className="border-b border-slate-200/80 overflow-x-auto scrollbar-none pb-1">
         <nav className="flex space-x-1.5 sm:space-x-2 min-w-max p-1 bg-slate-200/60 rounded-2xl">
           {[
@@ -1638,35 +1640,37 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </p>
             </div>
 
+            {/* ปุ่มเพิ่มสูตรใหม่: ปลดล็อกให้กดได้ทันทีโดยไม่ต้องผ่านโหมด Edit */}
             <div className="ml-auto flex items-center gap-2">
-            <button
-              disabled={!canEdit('formula-new')}
-              onClick={() => {
-                const last = project.formulas[project.formulas.length - 1];
-                const newF: Formula = {
-                  id: uid(),
-                  ver: `V${project.formulas.length + 1}`,
-                  code: '',
-                  date: todayISO(),
-                  changes: '',
-                  steps: JSON.parse(JSON.stringify(last.steps)),
-                  note: '',
-                  images: [],
-                  imageNote: '',
-                  isConfirmed: false,
-                  vatIncluded: false,
-                };
-                update({
-                  formulas: [...project.formulas, newF],
-                  chosenFormula: newF.id,
-                });
-              }}
-              className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-4 py-2 rounded-xl transition-colors cursor-pointer shadow-xs"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Create New Formula</span>
-            </button>
-            {panelActions('formula-new', false)}
+              {!isViewOnly && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const last = project.formulas[project.formulas.length - 1];
+                    const newF: Formula = {
+                      id: uid(),
+                      ver: `V${project.formulas.length + 1}`,
+                      code: '',
+                      date: todayISO(),
+                      changes: '',
+                      steps: last ? JSON.parse(JSON.stringify(last.steps)) : [{ qty: '', price: '' }],
+                      note: '',
+                      images: [],
+                      imageNote: '',
+                      isConfirmed: false,
+                      vatIncluded: false,
+                    };
+                    updateImmediately({
+                      formulas: [...project.formulas, newF],
+                      chosenFormula: newF.id,
+                    });
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-4 py-2 rounded-xl transition-colors cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-4 h-4 stroke-[3]" />
+                  <span>Create New Formula</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1954,7 +1958,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   if (newChosen === f.id) {
                                     newChosen = newFs[newFs.length - 1].id;
                                   }
-                                  update({
+                                  updateImmediately({
                                     formulas: newFs,
                                     chosenFormula: newChosen,
                                   });
@@ -1973,7 +1977,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     isConfirmed: false,
                                     vatIncluded: false,
                                   };
-                                  update({ formulas: [resetF], chosenFormula: resetF.id });
+                                  updateImmediately({ formulas: [resetF], chosenFormula: resetF.id });
                                 }
                               }
                             }}
@@ -2470,36 +2474,38 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </p>
             </div>
 
+            {/* ปุ่มเพิ่มบรรจุภัณฑ์ใหม่: ปลดล็อกให้กดได้ทันทีโดยไม่ต้องผ่านโหมด Edit */}
             <div className="ml-auto flex items-center gap-2">
-            <button
-              disabled={!canEdit('packaging-new')}
-              onClick={() => {
-                const newItem: PackagingItem = {
-                  id: uid(),
-                  type: 'Primary Package',
-                  name: '',
-                  spec: '',
-                  supplier: '',
-                  moq: '',
-                  steps: [{ qty: '', price: '' }],
-                  note: '',
-                  images: [],
-                  plateCost: '',
-                  leadTime: '',
-                  paymentTerm: '',
-                  warrantyTerms: '',
-                  selectedForCost: true,
-                  status: 'Not Started',
-                  vatIncluded: false,
-                };
-                update({ packaging: [...project.packaging, newItem] });
-              }}
-              className="flex items-center gap-1.5 text-xs font-extrabold px-4 py-2 rounded-xl bg-[#ccf835] hover:bg-[#bced28] text-slate-950 transition-colors cursor-pointer shadow-xs"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Add Package</span>
-            </button>
-            {panelActions('packaging-new', false)}
+              {!isViewOnly && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newItem: PackagingItem = {
+                      id: uid(),
+                      type: 'Primary Package',
+                      name: '',
+                      spec: '',
+                      supplier: '',
+                      moq: '',
+                      steps: [{ qty: '', price: '' }],
+                      note: '',
+                      images: [],
+                      plateCost: '',
+                      leadTime: '',
+                      paymentTerm: '',
+                      warrantyTerms: '',
+                      selectedForCost: true,
+                      status: 'Not Started',
+                      vatIncluded: false,
+                    };
+                    updateImmediately({ packaging: [...project.packaging, newItem] });
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-extrabold px-4 py-2 rounded-xl bg-[#ccf835] hover:bg-[#bced28] text-slate-950 transition-colors cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-4 h-4 stroke-[3]" />
+                  <span>Add Package</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -2518,19 +2524,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   Number(project.qty) < Number(it.moq);
 
                 return (
-                  <fieldset key={it.id} disabled={!canEdit(packagePanelId)} className="contents">
-                    <div
-                      className={`p-6 rounded-3xl border bg-white shadow-2xs space-y-4 transition-all ${
-                        it.selectedForCost !== false
-                          ? 'border-slate-200'
-                          : 'border-slate-200 bg-slate-50/60 opacity-80'
-                      }`}
-                    >
+                  <div
+                    key={it.id}
+                    className={`p-6 rounded-3xl border bg-white shadow-2xs space-y-4 transition-all ${
+                      it.selectedForCost !== false
+                        ? 'border-slate-200'
+                        : 'border-slate-200 bg-slate-50/60 opacity-80'
+                    }`}
+                  >
+                    {/* Header: ปุ่มคอนโทรลด้านซ้าย + ปุ่ม Edit & ปุ่มลบ X ขวาสุดสวยงาม */}
                     <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
                       <div className="flex items-center gap-3 flex-wrap">
+                        {/* Checkbox to select for cost calculation */}
                         <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 transition-colors">
                           <input
                             type="checkbox"
+                            disabled={!canEdit(packagePanelId)}
                             checked={it.selectedForCost !== false}
                             onChange={(e) => {
                               const copy = project.packaging.map((x) =>
@@ -2540,7 +2549,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               );
                               update({ packaging: copy });
                             }}
-                            className="w-4 h-4 accent-teal-600 rounded-sm cursor-pointer"
+                            className="w-4 h-4 accent-teal-600 rounded-sm cursor-pointer disabled:opacity-50"
                           />
                           <span className="text-xs font-bold text-slate-800">
                             Include in Cost Calculation
@@ -2548,6 +2557,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         </label>
 
                         <select
+                          disabled={!canEdit(packagePanelId)}
                           value={it.type}
                           onChange={(e) => {
                             const copy = project.packaging.map((x) =>
@@ -2557,7 +2567,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             );
                             update({ packaging: copy });
                           }}
-                          className="text-xs px-3 py-1.5 rounded-xl border border-slate-200 font-bold bg-white"
+                          className="text-xs px-3 py-1.5 rounded-xl border border-slate-200 font-bold bg-white disabled:opacity-70"
                         >
                           {PKG_TYPES.map((t) => (
                             <option key={t} value={t}>
@@ -2566,11 +2576,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           ))}
                         </select>
 
+                        {/* Status in English */}
                         <div className="flex items-center gap-1.5">
                           <span className="text-[11px] font-bold text-slate-400">
                             Status:
                           </span>
                           <select
+                            disabled={!canEdit(packagePanelId)}
                             value={it.status || 'Not Started'}
                             onChange={(e) => {
                               const copy = project.packaging.map((x) =>
@@ -2580,7 +2592,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               );
                               update({ packaging: copy });
                             }}
-                            className={`text-xs px-3 py-1 rounded-xl border font-bold ${
+                            className={`text-xs px-3 py-1 rounded-xl border font-bold disabled:opacity-70 ${
                               it.status === 'Completed'
                                 ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                                 : it.status === 'In Production'
@@ -2603,6 +2615,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
                           VAT
                           <select
+                            disabled={!canEdit(packagePanelId)}
                             value={it.vatIncluded ? 'included' : 'excluded'}
                             onChange={(e) => {
                               const copy = project.packaging.map((x) =>
@@ -2612,7 +2625,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               );
                               update({ packaging: copy });
                             }}
-                            className="px-2 py-1 rounded-lg border border-slate-200 bg-white"
+                            className="px-2 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-70"
                           >
                             <option value="excluded">Not included</option>
                             <option value="included">Included</option>
@@ -2638,22 +2651,33 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         )}
                       </div>
 
-                      <button
-                        onClick={() => {
-                          const copy = project.packaging.filter(
-                            (x) => x.id !== it.id
-                          );
-                          update({ packaging: copy });
-                        }}
-                        className="text-slate-400 hover:text-rose-600 p-1"
-                        title="Delete packaging"
-                      >
-                        ×
-                      </button>
-                      {panelActions(packagePanelId)}
+                      {/* ฝั่งขวาสุด: จัดวางปุ่ม Edit, ยุบขยาย และปุ่มลบ X สวยงามเป็นระเบียบ */}
+                      <div className="ml-auto flex items-center gap-2">
+                        {panelActions(packagePanelId)}
+
+                        {!isViewOnly && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Are you sure you want to delete ${it.name || 'this packaging'}?`)) {
+                                const copy = project.packaging.filter(
+                                  (x) => x.id !== it.id
+                                );
+                                updateImmediately({ packaging: copy });
+                              }
+                            }}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors cursor-pointer shadow-2xs"
+                            title="Delete packaging"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div hidden={collapsedPanels.has(packagePanelId)}>
+                    <fieldset disabled={!canEdit(packagePanelId)} className="contents">
+                    {/* Basic specs: Name, Supplier, MOQ */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -2712,7 +2736,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                     </div>
 
-                    <div>
+                    {/* EXPANDED SPECIFICATIONS & DETAILS FIELD */}
+                    <div className="pt-2">
                       <label className="block text-xs font-bold text-slate-700 mb-1">
                         Detailed Specifications, Dimensions & Dieline (ช่องใส่สเปกและรายละเอียดแบบขยาย)
                       </label>
@@ -2730,7 +2755,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-50/80 rounded-2xl border border-slate-200">
+                    {/* Terms & Commercials: Plate Cost, Lead Time, Payment Terms, Warranty */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-50/80 rounded-2xl border border-slate-200 mt-2">
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
                           Plate / Mold Cost (THB)
@@ -2744,7 +2770,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             type="number"
                             min="0"
                             step="any"
-                            disabled={isViewOnly}
                             value={it.plateCost || ''}
                             onChange={(e) => {
                               const copy = project.packaging.map((x) =>
@@ -2824,7 +2849,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
                         <span className="text-xs font-bold text-slate-800 block">
                           Tiered Pricing Ladder
@@ -2886,6 +2911,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     </td>
                                     <td className="py-1 text-center">
                                       <button
+                                        type="button"
                                         onClick={() =>
                                           deleteStep('packaging', it.id, sidx)
                                         }
@@ -2901,6 +2927,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             </table>
 
                             <button
+                              type="button"
                               onClick={() => addStep('packaging', it.id)}
                               className="text-xs text-teal-700 hover:underline font-bold cursor-pointer"
                             >
@@ -3014,9 +3041,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         />
                       </div>
                     </div>
+                    </fieldset>
                     </div>
-                    </div>
-                  </fieldset>
+                  </div>
                 );
               })
             )}
@@ -3240,7 +3267,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               onChange={(e) => {
                                 const copy = [...project.other];
                                 copy[idx].note = e.target.value;
-                                update({ other: copy });
                               }}
                               placeholder=""
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
@@ -3806,7 +3832,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             onChange={(e) => {
                               const copy = [...project.docs];
                               copy[idx].note = e.target.value;
-                              update({ docs: copy });
                             }}
                             placeholder=""
                             className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
