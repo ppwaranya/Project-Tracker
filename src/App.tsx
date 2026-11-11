@@ -20,6 +20,7 @@ import { UserManagementModal } from './components/UserManagementModal';
 const getSharedProjectId = (hash: string): string | null => {
   return hash.match(/^#?view\/([^&]+)/)?.[1] || null;
 };
+const FIREBASE_SYNC_TIMEOUT_MS = 15_000;
 
 // Sample demo project for fresh users
 const createSampleProject = (): Project => {
@@ -309,13 +310,18 @@ export default function App() {
         error: error.message,
       }));
     };
-    const markConnected = () =>
+    const markConnected = () => {
+      const hasPendingWrites =
+        pendingProjectWritesRef.current.size > 0 ||
+        pendingProjectDeletesRef.current.size > 0 ||
+        pendingHolidayWriteRef.current !== null;
       setSyncState((prev) => ({
         ...prev,
-        isSynced: true,
-        lastSyncedAt: new Date(),
-        error: null,
+        isSynced: hasPendingWrites ? prev.isSynced : true,
+        lastSyncedAt: hasPendingWrites ? prev.lastSyncedAt : new Date(),
+        error: hasPendingWrites ? prev.error : null,
       }));
+    };
 
     const unsubscribeProjects = FirebaseDataService.subscribeToProjects(
       (remoteProjects) => {
@@ -404,6 +410,14 @@ export default function App() {
       const deletes = [...pendingProjectDeletesRef.current];
       if (!upserts.length && !deletes.length) return;
       setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
+      const syncTimeout = window.setTimeout(() => {
+        setSyncState((prev) => ({
+          ...prev,
+          isSyncing: false,
+          isSynced: false,
+          error: 'Firebase has not confirmed the save. Changes remain queued.',
+        }));
+      }, FIREBASE_SYNC_TIMEOUT_MS);
       try {
         await FirebaseDataService.saveProjectChanges(upserts, deletes);
         for (const project of upserts) {
@@ -432,6 +446,8 @@ export default function App() {
           error: message,
         }));
         showToast(`Could not save to Firebase: ${message}`);
+      } finally {
+        clearTimeout(syncTimeout);
       }
     }, 700);
   };
@@ -539,6 +555,14 @@ export default function App() {
     pendingHolidayWriteRef.current = newHolidays;
     setHolidays(newHolidays);
     setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
+    const syncTimeout = window.setTimeout(() => {
+      setSyncState((prev) => ({
+        ...prev,
+        isSyncing: false,
+        isSynced: false,
+        error: 'Firebase has not confirmed the save. Changes remain queued.',
+      }));
+    }, FIREBASE_SYNC_TIMEOUT_MS);
     try {
       await FirebaseDataService.saveHolidays(newHolidays);
       if (pendingHolidayWriteRef.current === newHolidays) {
@@ -561,6 +585,8 @@ export default function App() {
       }));
       showToast(`Could not save holidays to Firebase: ${message}`);
       return;
+    } finally {
+      clearTimeout(syncTimeout);
     }
     showToast('Holidays updated');
   };

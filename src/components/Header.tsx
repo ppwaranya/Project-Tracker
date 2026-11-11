@@ -208,6 +208,8 @@ export const Header: React.FC<HeaderProps> = ({
                         className={`h-4 w-4 ${
                           syncState.isSyncing
                             ? 'animate-spin'
+                            : syncState.error
+                              ? 'text-amber-600'
                             : syncState.isSynced
                               ? 'text-emerald-600'
                               : 'text-slate-400'
@@ -215,6 +217,8 @@ export const Header: React.FC<HeaderProps> = ({
                       />
                       {syncState.isSyncing
                         ? 'Saving to Firebase...'
+                        : syncState.error
+                          ? 'Sync delayed'
                         : syncState.isSynced
                           ? 'Firebase Live'
                           : 'Firebase'}
