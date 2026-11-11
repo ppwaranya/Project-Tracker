@@ -17,6 +17,10 @@ import { HolidayModal } from './components/HolidayModal';
 import { LoginScreen } from './components/LoginScreen';
 import { UserManagementModal } from './components/UserManagementModal';
 
+const getSharedProjectId = (hash: string): string | null => {
+  return hash.match(/^#?view\/([^&]+)/)?.[1] || null;
+};
+
 // Sample demo project for fresh users
 const createSampleProject = (): Project => {
   const p = makeProject('อาหารเสริม');
@@ -205,6 +209,9 @@ export default function App() {
   const [isUrlViewOnly, setIsUrlViewOnly] = useState<boolean>(() => {
     return UserAuthService.isUrlViewOnly();
   });
+  const [sharedProjectId, setSharedProjectId] = useState<string | null>(() =>
+    getSharedProjectId(window.location.hash)
+  );
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
 
   const [user, setUser] = useState<User | null>(null);
@@ -238,6 +245,8 @@ export default function App() {
   // Navigation hash routing (#all, #p-{id}, #view-only)
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(() => {
     const hash = window.location.hash.replace(/^#/, '');
+    const sharedProjectId = getSharedProjectId(window.location.hash);
+    if (sharedProjectId) return sharedProjectId;
     const pMatch = hash.match(/p-([^&]+)/);
     if (pMatch) return pMatch[1];
     if (hash.startsWith('p-')) return hash.slice(2);
@@ -331,21 +340,30 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace(/^#/, '');
+      const sharedId = getSharedProjectId(window.location.hash);
       setIsUrlViewOnly(UserAuthService.isUrlViewOnly());
-      const pMatch = hash.match(/p-([^&]+)/);
-      if (pMatch) {
-        setCurrentProjectId(pMatch[1]);
-      } else if (hash.startsWith('p-')) {
-        setCurrentProjectId(hash.slice(2));
+      if (sharedId) {
+        setSharedProjectId(sharedId);
+        setCurrentProjectId(sharedId);
+      } else if (sharedProjectId) {
+        window.location.hash = `view/${sharedProjectId}`;
       } else {
+        setSharedProjectId(null);
+        const pMatch = hash.match(/p-([^&]+)/);
+        if (pMatch) {
+          setCurrentProjectId(pMatch[1]);
+        } else if (hash.startsWith('p-')) {
+          setCurrentProjectId(hash.slice(2));
+        } else {
         setCurrentProjectId(null);
+        }
       }
       window.scrollTo(0, 0);
     };
 
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+  }, [sharedProjectId]);
 
   const queueSave = (projectsToSave: Project[], deletedIds: string[] = []) => {
     if (!user) {
@@ -544,6 +562,7 @@ export default function App() {
         }}
         onOpenUserManagement={() => setIsUserManagementOpen(true)}
         isViewOnly={isViewOnly}
+        isSharedProjectView={Boolean(sharedProjectId)}
         costPrivacy={effectiveCostPrivacy}
         onToggleCostPrivacy={handleToggleCostPrivacy}
         syncState={syncState}
@@ -558,6 +577,7 @@ export default function App() {
               holidaysSet={holidaysSet}
               costPrivacy={effectiveCostPrivacy}
               isViewOnly={isViewOnly}
+              isSharedProjectView={Boolean(sharedProjectId)}
               onBack={() => {
                 window.location.hash = isUrlViewOnly ? 'view-only' : 'all';
               }}
@@ -570,14 +590,16 @@ export default function App() {
               <p className="text-base text-slate-700 font-semibold">
                 Project not found or was removed.
               </p>
-              <button
-                onClick={() => {
-                  window.location.hash = isUrlViewOnly ? 'view-only' : 'all';
-                }}
-                className="inline-flex items-center text-xs font-semibold px-4 py-2 bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 transition-colors cursor-pointer"
-              >
-                Return to All Projects
-              </button>
+              {!sharedProjectId && (
+                <button
+                  onClick={() => {
+                    window.location.hash = isUrlViewOnly ? 'view-only' : 'all';
+                  }}
+                  className="inline-flex items-center text-xs font-semibold px-4 py-2 bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 transition-colors cursor-pointer"
+                >
+                  Return to All Projects
+                </button>
+              )}
             </div>
           )
         ) : (

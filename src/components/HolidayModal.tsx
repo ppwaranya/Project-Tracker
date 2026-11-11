@@ -83,7 +83,7 @@ export const HolidayModal: React.FC<HolidayModalProps> = ({
                 <input
                   type="text"
                   value={h.name}
-                  placeholder="Holiday name (e.g. New Year's Day, Company Off)"
+                  placeholder=""
                   onChange={(e) => handleUpdate(h.id, 'name', e.target.value)}
                   className="flex-1 text-xs px-2.5 py-1.5 rounded-md border border-slate-300 bg-white"
                 />

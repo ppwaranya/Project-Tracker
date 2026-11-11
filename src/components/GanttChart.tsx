@@ -105,12 +105,16 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     setCollapsedPhases(next);
   };
 
-  const collapseAll = () => {
-    setCollapsedPhases(new Set(project.phases.map((ph) => ph.k)));
-  };
+  const allCollapsed =
+    project.phases.length > 0 &&
+    project.phases.every((phase) => collapsedPhases.has(phase.k));
 
-  const expandAll = () => {
-    setCollapsedPhases(new Set());
+  const toggleAllPhases = () => {
+    setCollapsedPhases(
+      allCollapsed
+        ? new Set()
+        : new Set(project.phases.map((phase) => phase.k))
+    );
   };
 
   return (
@@ -128,19 +132,15 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         <div className="flex items-center gap-2 self-end sm:self-auto">
           <button
             type="button"
-            onClick={collapseAll}
+            onClick={toggleAllPhases}
             className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-bold text-slate-700 transition-colors cursor-pointer"
           >
-            <ChevronsDownUp className="w-3.5 h-3.5 text-slate-500" />
-            <span>Collapse All</span>
-          </button>
-          <button
-            type="button"
-            onClick={expandAll}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-bold text-slate-700 transition-colors cursor-pointer"
-          >
-            <ChevronsUpDown className="w-3.5 h-3.5 text-slate-500" />
-            <span>Expand All</span>
+            {allCollapsed ? (
+              <ChevronsUpDown className="w-3.5 h-3.5 text-slate-500" />
+            ) : (
+              <ChevronsDownUp className="w-3.5 h-3.5 text-slate-500" />
+            )}
+            <span>{allCollapsed ? 'Expand All' : 'Collapse All'}</span>
           </button>
         </div>
       </div>

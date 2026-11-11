@@ -28,6 +28,7 @@ export interface Formula {
   images?: string[]; // Multiple sample images
   imageNote?: string;
   isConfirmed?: boolean; // Confirmed formulation for commercial production
+  vatIncluded?: boolean;
 }
 
 export type PackagingStatus =
@@ -53,6 +54,7 @@ export interface PackagingItem {
   warrantyTerms?: string; // Warranty / claims terms
   selectedForCost?: boolean; // Selected for cost calculation
   status?: PackagingStatus;
+  vatIncluded?: boolean;
 }
 
 export interface OtherCostItem {
@@ -62,6 +64,7 @@ export interface OtherCostItem {
   amount: string | number;
   times?: string | number;
   note: string;
+  vatIncluded?: boolean;
 }
 
 export interface Ingredient {
@@ -180,6 +183,8 @@ export interface CostSummaryResult {
   fhas: boolean;
   pk: number;
   ot: number;
+  subtotal: number;
+  vat: number;
   plateTotal: number;
   platePerUnit: number;
   unit: number;

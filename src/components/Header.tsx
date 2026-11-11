@@ -17,6 +17,7 @@ interface HeaderProps {
   onAppLogout: () => void;
   onOpenUserManagement: () => void;
   isViewOnly: boolean;
+  isSharedProjectView: boolean;
   costPrivacy: boolean;
   onToggleCostPrivacy: () => void;
   syncState: SyncState;
@@ -28,6 +29,7 @@ export const Header: React.FC<HeaderProps> = ({
   onAppLogout,
   onOpenUserManagement,
   isViewOnly,
+  isSharedProjectView,
   costPrivacy,
   onToggleCostPrivacy,
   syncState,
@@ -92,10 +94,24 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center justify-between h-14 sm:h-16 gap-2 sm:gap-3">
           {/* Brand - Project Tracker (Niond Style) */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <a
-              href="#all"
-              className="flex items-center gap-2.5 sm:gap-3 text-slate-900 group flex-shrink-0"
-            >
+            {isSharedProjectView ? (
+              <div className="flex items-center gap-2.5 sm:gap-3 text-slate-900 flex-shrink-0">
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl overflow-hidden flex items-center justify-center shadow-xs flex-shrink-0 bg-white border border-slate-200 p-0.5">
+                  <img
+                    src="/assets/aistudio/image_5173417e.png"
+                    alt="Project Tracker Logo"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 font-heading truncate">
+                  Project Tracker
+                </h1>
+              </div>
+            ) : (
+              <a
+                href="#all"
+                className="flex items-center gap-2.5 sm:gap-3 text-slate-900 group flex-shrink-0"
+              >
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl overflow-hidden flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform flex-shrink-0 bg-white border border-slate-200 p-0.5">
                 <img
                   src="/assets/aistudio/image_5173417e.png"
@@ -107,6 +123,7 @@ export const Header: React.FC<HeaderProps> = ({
                 Project Tracker
               </h1>
             </a>
+            )}
           </div>
 
           <div className="relative flex-shrink-0" ref={menuRef}>

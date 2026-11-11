@@ -15,6 +15,8 @@ import {
   TaskComputeResult,
 } from './types';
 
+export const VAT_RATE = 0.07;
+
 export const TM = [
   'Jan',
   'Feb',
@@ -107,7 +109,7 @@ export const PHASE_NAMES_EN: Record<number, string> = {
   2: 'Lab Testing',
   3: 'Product Registration/FDA',
   4: 'Packaging Development',
-  5: 'Mass Production',
+  5: 'Production',
   6: 'Delivery',
 };
 
@@ -116,7 +118,7 @@ export const PHASES_DEF = [
   { k: 2, name: 'Lab Testing', en: 'Lab Testing' },
   { k: 3, name: 'Product Registration/FDA', en: 'Product Registration/FDA' },
   { k: 4, name: 'Packaging Development', en: 'Packaging Development' },
-  { k: 5, name: 'Mass Production', en: 'Mass Production' },
+  { k: 5, name: 'Production', en: 'Production' },
   { k: 6, name: 'Delivery', en: 'Delivery' },
 ];
 
@@ -482,7 +484,10 @@ export function costOf(p: Project): CostSummaryResult {
     p.formulas.find((x) => x.id === p.chosenFormula) ||
     p.formulas[p.formulas.length - 1];
   const fr = lookup(f.steps, q);
-  let pk = 0;
+  let packagingSubtotal = 0;
+  let packagingVat = 0;
+  let otherSubtotal = 0;
+  let otherVat = 0;
   let plateTotal = 0;
   const below: string[] = [];
 
@@ -491,9 +496,13 @@ export function costOf(p: Project): CostSummaryResult {
 
   activePackaging.forEach((it) => {
     const r = lookup(it.steps, q);
-    pk += r.price;
+    packagingSubtotal += r.price;
     if (it.plateCost && Number(it.plateCost) > 0) {
       plateTotal += Number(it.plateCost);
+    }
+    const platePerItem = q > 0 ? (Number(it.plateCost) || 0) / q : 0;
+    if (!it.vatIncluded) {
+      packagingVat += (r.price + platePerItem) * VAT_RATE;
     }
     if (q && Number(it.moq) && q < Number(it.moq)) {
       below.push(it.name || '(ไม่มีชื่อ)');
@@ -501,20 +510,29 @@ export function costOf(p: Project): CostSummaryResult {
   });
 
   const platePerUnit = q > 0 ? plateTotal / q : 0;
-  pk += platePerUnit;
+  packagingSubtotal += platePerUnit;
 
-  let ot = 0;
   p.other.forEach((o) => {
-    ot += otherPer(o, q);
+    const amount = otherPer(o, q);
+    otherSubtotal += amount;
+    if (!o.vatIncluded) otherVat += amount * VAT_RATE;
   });
-  const unit = fr.price + pk + ot;
+  const formulaVat = f.vatIncluded ? 0 : fr.price * VAT_RATE;
+  const subtotal = fr.price + packagingSubtotal + otherSubtotal;
+  const vat = formulaVat + packagingVat + otherVat;
+  const fp = fr.price + formulaVat;
+  const pk = packagingSubtotal + packagingVat;
+  const ot = otherSubtotal + otherVat;
+  const unit = subtotal + vat;
   return {
     q,
     f,
-    fp: fr.price,
+    fp,
     fhas: fr.has,
     pk,
     ot,
+    subtotal,
+    vat,
     plateTotal,
     platePerUnit,
     unit,

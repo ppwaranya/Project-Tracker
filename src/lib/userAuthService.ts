@@ -227,6 +227,7 @@ export class UserAuthService {
     const hash = window.location.hash || '';
     const search = window.location.search || '';
     return (
+      /^#view\/[^&]+/.test(hash) ||
       hash.includes('view-only') ||
       hash.includes('readonly') ||
       search.includes('view=readonly') ||

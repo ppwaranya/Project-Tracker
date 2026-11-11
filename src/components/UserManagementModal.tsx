@@ -423,7 +423,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                 type="password"
                                 value={resetPasswordVal}
                                 onChange={(e) => setResetPasswordVal(e.target.value)}
-                                placeholder="New Pass"
+                                placeholder=""
                                 className="w-24 text-[11px] px-2 py-1 rounded-lg border border-slate-300 bg-white"
                               />
                               <button

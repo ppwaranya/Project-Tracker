@@ -14,7 +14,7 @@ export const CostSummary: React.FC<CostSummaryProps> = ({
   costSummary,
   costPrivacy,
 }) => {
-  const { q, f, fp, fhas, pk, ot, plateTotal, platePerUnit, unit, batch, below } = costSummary;
+  const { q, f, fp, fhas, pk, ot, subtotal, vat, plateTotal, platePerUnit, unit, batch, below } = costSummary;
   const total = unit || 0;
 
   const pct = (v: number) => (total > 0 ? Math.max(0, (v / total) * 100) : 0);
@@ -71,10 +71,7 @@ export const CostSummary: React.FC<CostSummaryProps> = ({
           <tbody className="divide-y divide-slate-100">
             <tr className="hover:bg-slate-50/60 transition-colors">
               <td className="py-3 px-4 text-slate-700 font-medium">
-                Formula Cost: {f.ver} {f.code ? `(${f.code})` : ''}{' '}
-                <span className="text-xs text-slate-400">
-                  {f.changes ? `· ${f.changes}` : '· Active formulation'}
-                </span>
+                Formula Cost ({f.ver})
               </td>
               <td className="py-3 px-4 text-right font-bold text-slate-900 tabular-nums">
                 {fhas ? `${baht(fp)} THB / pc` : <span className="text-slate-400 italic">Price not set</span>}
@@ -104,11 +101,23 @@ export const CostSummary: React.FC<CostSummaryProps> = ({
               </td>
             </tr>
 
+            <tr className="bg-slate-50/90 font-medium text-slate-800">
+              <td className="py-3 px-4">Subtotal (ก่อน VAT)</td>
+              <td className="py-3 px-4 text-right tabular-nums font-bold">
+                {baht(subtotal)} THB / pc
+              </td>
+            </tr>
+
+            <tr className="bg-amber-50/70 font-medium text-amber-900">
+              <td className="py-3 px-4">VAT 7% (เฉพาะรายการที่ยังไม่รวม VAT)</td>
+              <td className="py-3 px-4 text-right tabular-nums font-bold">
+                {baht(vat)} THB / pc
+              </td>
+            </tr>
+
             {/* Total Unit Cost */}
             <tr className="bg-emerald-50/80 border-t-2 border-emerald-500 font-bold text-slate-900">
-              <td className="py-3.5 px-4 text-emerald-950 font-bold text-sm">
-                Total Unit Cost (ต้นทุนรวมต่อหน่วย)
-              </td>
+              <td className="py-3.5 px-4 text-emerald-950 font-bold text-sm">Total Unit Cost (รวม VAT)</td>
               <td className="py-3.5 px-4 text-right text-base font-extrabold text-emerald-700 tabular-nums font-heading">
                 {baht(unit)} THB
               </td>
@@ -117,7 +126,7 @@ export const CostSummary: React.FC<CostSummaryProps> = ({
             {/* Total Batch Cost */}
             <tr className="bg-slate-50/90 font-medium text-slate-800">
               <td className="py-3 px-4">
-                Total Batch Production Cost (มูลค่ารวมทั้งรุ่นการผลิต){' '}
+                Total Batch Cost (รวม VAT){' '}
                 <span className="text-xs text-slate-500">
                   ({q ? `${Number(q).toLocaleString('en-US')} pcs` : 'Quantity not set'})
                 </span>

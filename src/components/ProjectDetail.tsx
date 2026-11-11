@@ -25,6 +25,7 @@ import {
   TEST_STATUS_LIST,
   todayISO,
   uid,
+  VAT_RATE,
 } from '../lib/trackerLogic';
 import { GanttChart } from './GanttChart';
 import { CostSummary } from './CostSummary';
@@ -59,6 +60,7 @@ interface ProjectDetailProps {
   holidaysSet: Set<string>;
   costPrivacy: boolean;
   isViewOnly?: boolean;
+  isSharedProjectView?: boolean;
   onBack: () => void;
   onUpdateProject: (updated: Project) => void;
   onDuplicateProject: (project: Project) => void;
@@ -68,16 +70,23 @@ interface ProjectDetailProps {
 type TabKey = 'overview' | 'formula' | 'packaging' | 'cost' | 'timeline' | 'docs';
 
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({
-  project,
+  project: savedProject,
   holidaysSet,
   costPrivacy,
   isViewOnly = false,
+  isSharedProjectView = false,
   onBack,
   onUpdateProject,
   onDuplicateProject,
   onDeleteProject,
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
+  const [editingSection, setEditingSection] = useState<TabKey | null>(null);
+  const [draftProject, setDraftProject] = useState<Project | null>(null);
+  const [collapsedPanels, setCollapsedPanels] = useState<Set<string>>(new Set());
+  const [comparisonFormulaIds, setComparisonFormulaIds] = useState<Set<string>>(new Set());
+  const [showFormulaComparison, setShowFormulaComparison] = useState(false);
+  const project = draftProject || savedProject;
   const [previewImage, setPreviewImage] = useState<{
     src: string;
     alt: string;
@@ -104,18 +113,100 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       : { amount, unit: '' };
   };
 
+  const canEdit = (section: TabKey) =>
+    !isViewOnly && editingSection === section;
+
+  const panelToggle = (panelId: string) => (
+    <button
+      type="button"
+      aria-expanded={!collapsedPanels.has(panelId)}
+      onClick={() =>
+        setCollapsedPanels((current) => {
+          const next = new Set(current);
+          if (next.has(panelId)) next.delete(panelId);
+          else next.add(panelId);
+          return next;
+        })
+      }
+      className="shrink-0 cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-50"
+    >
+      {collapsedPanels.has(panelId) ? 'Expand' : 'Collapse'}
+    </button>
+  );
+
+  const beginEdit = (section: TabKey) => {
+    if (isViewOnly || editingSection !== null) return;
+    setDraftProject(JSON.parse(JSON.stringify(savedProject)) as Project);
+    setEditingSection(section);
+  };
+
+  const saveEdits = () => {
+    if (!editingSection || !draftProject || isViewOnly) return;
+    onUpdateProject({
+      ...draftProject,
+      updatedAt: Date.now(),
+      rev: (savedProject.rev || 0) + 1,
+    });
+    setDraftProject(null);
+    setEditingSection(null);
+  };
+
+  const cancelEdits = () => {
+    setDraftProject(null);
+    setEditingSection(null);
+  };
+
+  const tabEditActions = !isViewOnly ? (
+    <div className="flex items-center justify-end gap-2">
+      {editingSection === null ? (
+        <button
+          type="button"
+          onClick={() => beginEdit(activeTab)}
+          className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-700"
+        >
+          Edit
+        </button>
+      ) : (
+        <>
+          <span className="text-xs font-semibold text-amber-700">
+            Editing: {editingSection}
+          </span>
+          <button
+            type="button"
+            onClick={saveEdits}
+            className="px-4 py-2 rounded-xl bg-[#ccf835] text-slate-950 text-xs font-extrabold hover:bg-[#bced28]"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={cancelEdits}
+            className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+        </>
+      )}
+    </div>
+  ) : null;
+
   // Calculations
   const cs = compute(project, holidaysSet);
   const co = costOf(project);
   const s = summ(project, cs, co, holidaysSet);
 
   const update = (partial: Partial<Project>) => {
-    onUpdateProject({
-      ...project,
-      ...partial,
-      updatedAt: Date.now(),
-      rev: (project.rev || 0) + 1,
-    });
+    if (!editingSection || isViewOnly) return;
+    setDraftProject((current) =>
+      current
+        ? {
+            ...current,
+            ...partial,
+            updatedAt: Date.now(),
+            rev: (current.rev || 0) + 1,
+          }
+        : current
+    );
   };
 
   const handleDuplicate = () => {
@@ -329,13 +420,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           }`}
         />
         <div className="space-y-2 flex-1 min-w-0">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-teal-700 transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>All Projects</span>
-          </button>
+          {!isSharedProjectView && (
+            <button
+              onClick={onBack}
+              disabled={editingSection !== null}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-teal-700 transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>All Projects</span>
+            </button>
+          )}
 
           {/* Full Multiline Project Name (Never truncated, wraps to new line) */}
           <div className="w-full">
@@ -353,7 +447,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   el.style.height = `${el.scrollHeight}px`;
                 }
               }}
-              placeholder="Project Name e.g. Peach Collagen Peptide 5,000 mg"
+              disabled={!canEdit('overview')}
+              placeholder=""
               className="w-full text-xl sm:text-2xl font-extrabold text-slate-900 border-b border-transparent hover:border-slate-300 focus:border-amber-400 focus:outline-hidden bg-transparent px-1 py-1 rounded-sm resize-none overflow-hidden leading-snug whitespace-normal break-words transition-colors"
             />
           </div>
@@ -366,6 +461,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </span>
               <input
                 type="text"
+                disabled={!canEdit('overview')}
                 value={project.lotNo || ''}
                 onChange={(e) => update({ lotNo: e.target.value })}
                 placeholder=""
@@ -374,7 +470,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
 
             <select
-              disabled={isViewOnly}
+              disabled={!canEdit('overview')}
               value={project.category === 'อาหารเสริม' ? 'Dietary Supplement' : project.category === 'สกินแคร์' ? 'Skincare' : project.category}
               onChange={(e) => update({ category: e.target.value as any })}
               className="text-xs px-3 py-1.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-700 shadow-2xs cursor-pointer disabled:opacity-70"
@@ -384,7 +480,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </select>
 
             <select
-              disabled={isViewOnly}
+              disabled={!canEdit('overview')}
               value={project.status === 'กำลังดำเนินการ' ? 'In Progress' : project.status === 'เสร็จสิ้น' ? 'Completed' : project.status === 'พักไว้' ? 'On Hold' : project.status === 'ยกเลิก' ? 'Cancelled' : project.status}
               onChange={(e) => update({ status: e.target.value as any })}
               className={`text-xs px-3 py-1.5 rounded-xl border font-bold shadow-2xs cursor-pointer disabled:opacity-70 ${
@@ -432,6 +528,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <>
               <button
                 onClick={handleDuplicate}
+                disabled={editingSection !== null}
                 className="flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer shadow-2xs"
               >
                 <Copy className="w-3.5 h-3.5 text-slate-500" />
@@ -440,6 +537,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
               <button
                 onClick={handleDelete}
+                disabled={editingSection !== null}
                 className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-xl border transition-all cursor-pointer shadow-2xs ${
                   armDelete
                     ? 'bg-rose-600 text-white border-rose-600 animate-pulse'
@@ -541,6 +639,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           ].map((t) => (
             <button
               key={t.key}
+              disabled={editingSection !== null}
               onClick={() => setActiveTab(t.key as TabKey)}
               className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
                 activeTab === t.key
@@ -557,14 +656,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {tabEditActions}
+          <fieldset disabled={!canEdit('overview')} className="contents">
           {/* Section 1: Specifications & FDA Licensing */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <h3 className="text-sm font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
               <Info className="w-4 h-4 text-teal-600" />
               <span>Project Specifications & Regulatory Registration</span>
+              {panelToggle('overview-specifications')}
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+              hidden={collapsedPanels.has('overview-specifications')}
+            >
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Project Owner
@@ -696,9 +801,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <span className="text-[11px] text-slate-400 font-medium">
                 Benchmark sensory, texture, taste, packaging & pricing against market competitors
               </span>
+              {panelToggle('overview-benchmark')}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div
+              className="grid grid-cols-1 lg:grid-cols-3 gap-5"
+              hidden={collapsedPanels.has('overview-benchmark')}
+            >
               <div className="space-y-3 lg:col-span-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -757,7 +866,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         },
                       })
                     }
-                    placeholder="Describe target sensory profile (e.g. fast cold water solubility, smooth peach aroma, non-sour aftertaste, premium slide-out box packaging)"
+                    placeholder=""
                     className="w-full text-xs sm:text-sm p-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
                   />
                 </div>
@@ -868,8 +977,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-500" />
               <span>Unique Selling Proposition (USP) & Marketing Claims</span>
+              {panelToggle('overview-usp')}
             </h3>
             <textarea
+              hidden={collapsedPanels.has('overview-usp')}
               rows={3}
               value={project.uspClaims || ''}
               onChange={(e) => update({ uspClaims: e.target.value })}
@@ -888,6 +999,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                {panelToggle('overview-ingredients')}
                 <button
                   onClick={() => setShowPasteArea(!showPasteArea)}
                   className="text-xs font-bold text-slate-600 hover:text-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
@@ -912,7 +1024,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
 
             {/* Paste box */}
-            {showPasteArea && (
+            {showPasteArea && !collapsedPanels.has('overview-ingredients') && (
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                 <p className="text-xs text-slate-600 font-medium">
                   Paste rows (one ingredient per line). Separate name, amount, and notes with commas or tabs:
@@ -933,7 +1045,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </div>
             )}
 
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <div
+              className="overflow-x-auto rounded-2xl border border-slate-200"
+              hidden={collapsedPanels.has('overview-ingredients')}
+            >
               <table className="w-full text-xs text-left">
                 <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
                   <tr>
@@ -985,7 +1100,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 };
                                 update({ ingredients: copy });
                               }}
-                              placeholder="300"
+                              placeholder=""
                               aria-label="Amount"
                               className="w-2/3 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
                             />
@@ -1005,7 +1120,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 };
                                 update({ ingredients: copy });
                               }}
-                              placeholder="mg / g / %"
+                              placeholder=""
                               aria-label="Unit"
                               className="w-1/3 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
                             />
@@ -1076,9 +1191,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Lab Test</span>
               </button>
+              {panelToggle('overview-tests')}
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <div
+              className="overflow-x-auto rounded-2xl border border-slate-200"
+              hidden={collapsedPanels.has('overview-tests')}
+            >
               <table className="w-full text-xs text-left min-w-[700px]">
                 <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
                   <tr>
@@ -1172,7 +1291,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               copy[idx].note = e.target.value;
                               update({ tests: copy });
                             }}
-                            placeholder="Report details"
+                            placeholder=""
                             className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
                           />
                         </td>
@@ -1196,7 +1315,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
 
             {/* Quick Templates */}
-            <div className="flex items-center gap-1.5 flex-wrap pt-1 text-xs">
+            <div
+              className="flex items-center gap-1.5 flex-wrap pt-1 text-xs"
+              hidden={collapsedPanels.has('overview-tests')}
+            >
               <span className="text-slate-500 font-bold">Quick Add:</span>
               {[
                 'Stability test',
@@ -1263,9 +1385,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Permit</span>
               </button>
+              {panelToggle('overview-permits')}
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <div
+              className="overflow-x-auto rounded-2xl border border-slate-200"
+              hidden={collapsedPanels.has('overview-permits')}
+            >
               <table className="w-full text-xs text-left min-w-[760px]">
                 <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
                   <tr>
@@ -1373,7 +1499,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               copy[idx].note = e.target.value;
                               update({ regulatory: copy });
                             }}
-                            placeholder="Additional details"
+                            placeholder=""
                             className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
                           />
                         </td>
@@ -1399,7 +1525,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
 
             {/* Quick Templates for Regulatory */}
-            <div className="flex items-center gap-1.5 flex-wrap pt-1 text-xs">
+            <div
+              className="flex items-center gap-1.5 flex-wrap pt-1 text-xs"
+              hidden={collapsedPanels.has('overview-permits')}
+            >
               <span className="text-slate-500 font-bold">Quick Add:</span>
               {[
                 { name: 'อย. อาหารเสริม', agency: 'Thai FDA' },
@@ -1433,12 +1562,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               ))}
             </div>
           </section>
+          </fieldset>
         </div>
       )}
 
       {/* TAB 2: FORMULATION */}
       {activeTab === 'formula' && (
         <div className="space-y-6">
+          {tabEditActions}
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h3 className="text-base font-bold text-slate-900 font-heading">
@@ -1456,6 +1587,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
 
             <button
+              disabled={!canEdit('formula')}
               onClick={() => {
                 const last = project.formulas[project.formulas.length - 1];
                 const newF: Formula = {
@@ -1469,6 +1601,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   images: [],
                   imageNote: '',
                   isConfirmed: false,
+                  vatIncluded: false,
                 };
                 update({
                   formulas: [...project.formulas, newF],
@@ -1481,6 +1614,100 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <span>Create New Formula</span>
             </button>
           </div>
+
+          <section className="bg-white p-4 rounded-2xl border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-bold text-slate-800">
+                Compare formulas
+              </span>
+              <button
+                type="button"
+                disabled={
+                  project.formulas.filter((formula) =>
+                    comparisonFormulaIds.has(formula.id)
+                  ).length < 2
+                }
+                onClick={() => setShowFormulaComparison((show) => !show)}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold disabled:opacity-40"
+              >
+                {showFormulaComparison ? 'Hide Comparison' : 'Compare Selected'}
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {project.formulas.map((formula) => (
+                <label key={formula.id} className="flex items-center gap-1.5 text-xs">
+                  <input
+                    type="checkbox"
+                    disabled={isViewOnly}
+                    checked={comparisonFormulaIds.has(formula.id)}
+                    onChange={(event) =>
+                      setComparisonFormulaIds((current) => {
+                        const next = new Set(current);
+                        if (event.target.checked) next.add(formula.id);
+                        else next.delete(formula.id);
+                        return next;
+                      })
+                    }
+                    className="accent-teal-600"
+                  />
+                  {formula.ver} {formula.code ? `(${formula.code})` : ''}
+                </label>
+              ))}
+            </div>
+            {showFormulaComparison &&
+              project.formulas.filter((formula) =>
+                comparisonFormulaIds.has(formula.id)
+              ).length > 1 && (
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-xs text-left">
+                    <tbody className="divide-y divide-slate-100">
+                      {[
+                        ['Changes', (formula: Formula) => formula.changes || '-'],
+                        [
+                          'Price tiers',
+                          (formula: Formula) =>
+                            formula.steps
+                              .map((step) => `${step.qty} units: ${baht(Number(step.price) || 0)} THB`)
+                              .join(' · ') || '-',
+                        ],
+                        [
+                          'Ingredients',
+                          (formula: Formula) =>
+                            formula.ingredients?.length
+                              ? formula.ingredients
+                                  .map((ingredient) =>
+                                    `${ingredient.name}: ${ingredient.amount}${ingredient.unit ? ` ${ingredient.unit}` : ''}`
+                                  )
+                                  .join(' · ')
+                              : '-',
+                        ],
+                        ['Notes', (formula: Formula) => formula.note || '-'],
+                      ].map(([label, getter]) => {
+                        const selected = project.formulas.filter((formula) =>
+                          comparisonFormulaIds.has(formula.id)
+                        );
+                        const getValue = getter as (formula: Formula) => string;
+                        const values = selected.map(getValue);
+                        const differs = new Set(values).size > 1;
+                        return (
+                          <tr key={label as string}>
+                            <th className="p-2 bg-slate-50 whitespace-nowrap">{label as string}</th>
+                            {selected.map((formula, index) => (
+                              <td
+                                key={formula.id}
+                                className={`p-2 min-w-48 align-top ${differs ? 'bg-amber-50/70' : ''}`}
+                              >
+                                <strong>{formula.ver}</strong>: {values[index]}
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+          </section>
 
           <div className="space-y-5">
             {project.formulas
@@ -1500,7 +1727,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     Number(project.qty) || 0
                   );
                   if (formulaPriceRes.has && prevPriceRes.has) {
-                    const diff = formulaPriceRes.price - prevPriceRes.price;
+                    const diff =
+                      formulaPriceRes.price * (f.vatIncluded ? 1 : 1 + VAT_RATE) -
+                      prevPriceRes.price *
+                        (prevFormula.vatIncluded ? 1 : 1 + VAT_RATE);
                     if (diff === 0) deltaText = 'Same as previous';
                     else if (diff > 0) deltaText = `▲ +${baht(diff)} ฿`;
                     else deltaText = `▼ -${baht(Math.abs(diff))} ฿`;
@@ -1518,6 +1748,28 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         : 'bg-white border-slate-200'
                     }`}
                   >
+                    <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                      <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                        <input
+                          type="checkbox"
+                          disabled={isViewOnly}
+                          checked={comparisonFormulaIds.has(f.id)}
+                          onChange={(event) =>
+                            setComparisonFormulaIds((current) => {
+                              const next = new Set(current);
+                              if (event.target.checked) next.add(f.id);
+                              else next.delete(f.id);
+                              return next;
+                            })
+                          }
+                        />
+                        Compare
+                      </label>
+                      <strong className="flex-1 text-xs">{f.ver} {f.code || ''}</strong>
+                      {panelToggle(`formula-${f.id}`)}
+                    </div>
+                    <div hidden={collapsedPanels.has(`formula-${f.id}`)}>
+                    <fieldset disabled={!canEdit('formula')} className="contents">
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
                       <div className="flex items-center gap-2.5 flex-wrap">
@@ -1575,7 +1827,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             <>
                               <span className="font-extrabold text-slate-800 text-sm">
                                 {formulaPriceRes.has
-                                  ? `${baht(formulaPriceRes.price)} ฿ / pc`
+                                  ? `${baht(formulaPriceRes.price * (f.vatIncluded ? 1 : 1 + VAT_RATE))} ฿ / pc`
                                   : 'Price not set'}
                               </span>
                               {deltaText && (
@@ -1668,6 +1920,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     images: [],
                                     imageNote: '',
                                     isConfirmed: false,
+                                    vatIncluded: false,
                                   };
                                   update({ formulas: [resetF], chosenFormula: resetF.id });
                                 }
@@ -1702,7 +1955,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               );
                               update({ formulas: newFs });
                             }}
-                            placeholder="Reason for changes (e.g. Reduced sweetness by 10%, enhanced natural peach aroma)"
+                            placeholder=""
                             className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
                           />
                         </div>
@@ -1814,13 +2067,28 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
                       {/* Tiered Step Pricing */}
                       <div className="bg-slate-50/90 p-4 rounded-2xl border border-slate-200 space-y-2.5">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
                           <span className="text-xs font-bold text-slate-800">
                             Tiered Pricing (ราคาขั้นบันได)
                           </span>
-                          <span className="text-[11px] text-slate-400">
-                            Per order qty
-                          </span>
+                          <label className="text-[11px] text-slate-600 flex items-center gap-1">
+                            Per order qty · VAT
+                            <select
+                              value={f.vatIncluded ? 'included' : 'excluded'}
+                              onChange={(event) => {
+                                const newFs = project.formulas.map((formula) =>
+                                  formula.id === f.id
+                                    ? { ...formula, vatIncluded: event.target.value === 'included' }
+                                    : formula
+                                );
+                                update({ formulas: newFs });
+                              }}
+                              className="px-2 py-1 rounded-lg border border-slate-200 bg-white"
+                            >
+                              <option value="excluded">Not included</option>
+                              <option value="included">Included</option>
+                            </select>
+                          </label>
                         </div>
 
                         {costPrivacy ? (
@@ -1873,7 +2141,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                             e.target.value
                                           )
                                         }
-                                        placeholder="0.00"
+                                        placeholder=""
                                         className="w-full px-2.5 py-1 rounded-lg border border-slate-200 bg-white font-medium"
                                       />
                                     </td>
@@ -2048,7 +2316,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                           });
                                           update({ formulas: newFs });
                                         }}
-                                        placeholder="300"
+                                        placeholder=""
                                         aria-label="Amount"
                                         className="w-2/3 min-w-0 px-2 py-1 rounded-lg border border-slate-200 bg-white font-medium text-xs"
                                       />
@@ -2073,7 +2341,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                           });
                                           update({ formulas: newFs });
                                         }}
-                                        placeholder="mg / g / %"
+                                        placeholder=""
                                         aria-label="Unit"
                                         className="w-1/3 min-w-0 px-2 py-1 rounded-lg border border-slate-200 bg-white text-xs"
                                       />
@@ -2128,6 +2396,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         </table>
                       </div>
                     </div>
+                    </fieldset>
+                    </div>
                   </div>
                 );
               })}
@@ -2138,6 +2408,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* TAB 3: PACKAGING */}
       {activeTab === 'packaging' && (
         <div className="space-y-6">
+          {tabEditActions}
+          <fieldset disabled={!canEdit('packaging')} className="contents">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h3 className="text-base font-bold text-slate-900 font-heading">
@@ -2167,6 +2439,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   warrantyTerms: '',
                   selectedForCost: true,
                   status: 'Not Started',
+                  vatIncluded: false,
                 };
                 update({ packaging: [...project.packaging, newItem] });
               }}
@@ -2185,6 +2458,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             ) : (
               project.packaging.map((it) => {
                 const pkgPriceRes = lookup(it.steps, Number(project.qty) || 0);
+                const packagePanelId = `packaging-${it.id}`;
                 const isBelowMoq =
                   project.qty &&
                   Number(it.moq) &&
@@ -2276,6 +2550,25 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           </select>
                         </div>
 
+                        <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                          VAT
+                          <select
+                            value={it.vatIncluded ? 'included' : 'excluded'}
+                            onChange={(e) => {
+                              const copy = project.packaging.map((x) =>
+                                x.id === it.id
+                                  ? { ...x, vatIncluded: e.target.value === 'included' }
+                                  : x
+                              );
+                              update({ packaging: copy });
+                            }}
+                            className="px-2 py-1 rounded-lg border border-slate-200 bg-white"
+                          >
+                            <option value="excluded">Not included</option>
+                            <option value="included">Included</option>
+                          </select>
+                        </label>
+
                         {costPrivacy ? (
                           <span className="text-xs text-slate-400 font-mono">
                             ••••••
@@ -2283,7 +2576,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         ) : (
                           <span className="text-sm font-extrabold text-slate-900">
                             {pkgPriceRes.has
-                              ? `${baht(pkgPriceRes.price)} ฿ / pc`
+                              ? `${baht(pkgPriceRes.price * (it.vatIncluded ? 1 : 1 + VAT_RATE))} ฿ / pc`
                               : 'Price not set'}
                           </span>
                         )}
@@ -2307,8 +2600,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       >
                         ×
                       </button>
+                      {panelToggle(packagePanelId)}
                     </div>
 
+                    <div hidden={collapsedPanels.has(packagePanelId)}>
                     {/* Basic specs: Name, Supplier, MOQ */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
@@ -2382,7 +2677,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           );
                           update({ packaging: copy });
                         }}
-                        placeholder="Enter full technical details: e.g. 350 gsm art card, Matte lamination, Hot gold foil stamping on logo, UV Spot finish, Dieline 12x8x18 cm, Tuck end box with inner partition..."
+                        placeholder=""
                         className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
                       />
                     </div>
@@ -2540,7 +2835,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                             e.target.value
                                           )
                                         }
-                                        placeholder="0.00"
+                                        placeholder=""
                                         className="w-full px-2.5 py-1 rounded-lg border border-slate-200 bg-white"
                                       />
                                     </td>
@@ -2664,16 +2959,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             );
                             update({ packaging: copy });
                           }}
-                          placeholder="Additional notes e.g. Pantone 185C, Gold hot stamp"
+                          placeholder=""
                           className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white"
                         />
                       </div>
+                    </div>
                     </div>
                   </div>
                 );
               })
             )}
           </div>
+          </fieldset>
         </div>
       )}
 
@@ -2693,9 +2990,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
         ) : (
           <div className="space-y-6">
+            {tabEditActions}
+            <fieldset disabled={!canEdit('cost')} className="contents">
             <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
               <h3 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center justify-between font-heading">
                 <span>Cost & Budget Analysis</span>
+                {panelToggle('cost-summary')}
                 {costPrivacy && (
                   <span className="text-xs font-bold text-amber-900 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 flex items-center gap-1.5">
                     <EyeOff className="w-3.5 h-3.5" />
@@ -2704,11 +3004,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 )}
               </h3>
 
-            <CostSummary
-              project={project}
-              costSummary={co}
-              costPrivacy={costPrivacy}
-            />
+            <div hidden={collapsedPanels.has('cost-summary')}>
+              <CostSummary
+                project={project}
+                costSummary={co}
+                costPrivacy={costPrivacy}
+              />
+            </div>
           </section>
 
           {/* Other / Operating Expenses & Custom Allocation Units */}
@@ -2735,6 +3037,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         amount: '',
                         times: '',
                         note: '',
+                        vatIncluded: false,
                       },
                     ],
                   })
@@ -2744,9 +3047,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Expense Item</span>
               </button>
+              {panelToggle('cost-other')}
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <div
+              className="overflow-x-auto rounded-2xl border border-slate-200"
+              hidden={collapsedPanels.has('cost-other')}
+            >
               <table className="w-full text-xs text-left min-w-[760px]">
                 <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
                   <tr>
@@ -2768,7 +3075,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     </tr>
                   ) : (
                     project.other.map((o, idx) => {
-                      const costPerUnit = otherPer(o, Number(project.qty) || 0);
+                      const baseCostPerUnit = otherPer(o, Number(project.qty) || 0);
+                      const costPerUnit =
+                        baseCostPerUnit * (o.vatIncluded ? 1 : 1 + VAT_RATE);
                       return (
                         <tr key={o.id} className="hover:bg-slate-50/70">
                           <td className="p-2 pl-3.5">
@@ -2820,10 +3129,26 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   copy[idx].amount = e.target.value;
                                   update({ other: copy });
                                 }}
-                                placeholder="0.00"
+                                placeholder=""
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
                               />
                             )}
+                            <select
+                              value={o.vatIncluded ? 'included' : 'excluded'}
+                              onChange={(e) => {
+                                const copy = [...project.other];
+                                copy[idx] = {
+                                  ...copy[idx],
+                                  vatIncluded: e.target.value === 'included',
+                                };
+                                update({ other: copy });
+                              }}
+                              className="mt-1 w-full px-2 py-1 rounded-lg border border-slate-200 bg-white text-[11px]"
+                              aria-label="VAT status"
+                            >
+                              <option value="excluded">Not included VAT</option>
+                              <option value="included">VAT included</option>
+                            </select>
                           </td>
 
                           <td className="p-2">
@@ -2837,7 +3162,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   copy[idx].times = e.target.value;
                                   update({ other: copy });
                                 }}
-                                placeholder="1"
+                                placeholder=""
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-center"
                               />
                             ) : (
@@ -2866,7 +3191,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 copy[idx].note = e.target.value;
                                 update({ other: copy });
                               }}
-                              placeholder="Notes"
+                              placeholder=""
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
                             />
                           </td>
@@ -2905,6 +3230,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <option value="ล็อต" />
             </datalist>
           </section>
+          </fieldset>
         </div>
         )
       )}
@@ -2912,13 +3238,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* TAB 5: TIMELINE & GANTT */}
       {activeTab === 'timeline' && (
         <div className="space-y-6">
+          {tabEditActions}
           {/* Timeline Summary Metrics */}
+          {!isViewOnly && (
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-3">
             <h3 className="text-base font-bold text-slate-900 font-heading">
               Timeline Milestones & Delivery Schedule
+              {panelToggle('timeline-summary')}
             </h3>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div
+              className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs"
+              hidden={collapsedPanels.has('timeline-summary')}
+            >
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
                 <span className="text-slate-400 block mb-0.5 font-medium">
                   First Task Start Date
@@ -2964,16 +3296,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </div>
             </div>
           </section>
+          )}
 
           {/* Collapsible Gantt Chart Section */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <h3 className="text-base font-bold text-slate-900 font-heading">
               Weekly Gantt Chart
+              {panelToggle('timeline-gantt')}
             </h3>
-            <GanttChart project={project} computedTasks={cs} />
+            <div hidden={collapsedPanels.has('timeline-gantt')}>
+              <GanttChart project={project} computedTasks={cs} />
+            </div>
           </section>
 
           {/* Phased Task Schedule */}
+          {!isViewOnly && (
+          <fieldset disabled={!canEdit('timeline')} className="contents">
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -2984,9 +3322,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   Modifying working days or dependencies dynamically reschedules downstream phases
                 </p>
               </div>
+              {panelToggle('timeline-schedule')}
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <div
+              className="overflow-x-auto rounded-2xl border border-slate-200"
+              hidden={collapsedPanels.has('timeline-schedule')}
+            >
               <table className="w-full text-xs text-left min-w-[840px]">
                 <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
                   <tr>
@@ -3224,12 +3566,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </table>
             </div>
           </section>
+          </fieldset>
+          )}
         </div>
       )}
 
       {/* TAB 6: DOCUMENTS */}
       {activeTab === 'docs' && (
         <div className="space-y-6">
+          {tabEditActions}
+          <fieldset disabled={!canEdit('docs')} className="contents">
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
@@ -3240,11 +3586,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   Attach links to certificates, test reports, artwork files, and contracts.
                 </p>
               </div>
+              {panelToggle('docs-upload')}
             </div>
 
             {/* External Link Input Form */}
             <form
               onSubmit={handleAddLink}
+              hidden={collapsedPanels.has('docs-upload')}
               className="p-4 bg-slate-50 rounded-2xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end"
             >
               <div>
@@ -3285,7 +3633,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   type="url"
                   value={linkUrl}
                   onChange={(e) => setLinkUrl(e.target.value)}
-                  placeholder="https://drive.google.com/..."
+                  placeholder=""
                   className="w-full text-xs px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
                 />
               </div>
@@ -3303,11 +3651,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
           {/* Documents Table */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900">
-              Attached Documents ({project.docs.length})
+            <h3 className="text-sm font-bold text-slate-900 flex items-center justify-between">
+              <span>Attached Documents ({project.docs.length})</span>
+              {panelToggle('docs-list')}
             </h3>
 
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <div
+              className="overflow-x-auto rounded-2xl border border-slate-200"
+              hidden={collapsedPanels.has('docs-list')}
+            >
               <table className="w-full text-xs text-left min-w-[700px]">
                 <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
                   <tr>
@@ -3406,7 +3758,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               copy[idx].note = e.target.value;
                               update({ docs: copy });
                             }}
-                            placeholder="Add notes..."
+                            placeholder=""
                             className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
                           />
                         </td>
@@ -3434,6 +3786,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </table>
             </div>
           </section>
+          </fieldset>
         </div>
       )}
 
