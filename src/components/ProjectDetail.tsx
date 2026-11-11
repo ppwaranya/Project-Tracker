@@ -53,6 +53,8 @@ import {
   X,
   FileCheck,
   Lock,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
 interface ProjectDetailProps {
@@ -116,23 +118,34 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const canEdit = (section: TabKey) =>
     !isViewOnly && editingSection === section;
 
-  const panelToggle = (panelId: string) => (
-    <button
-      type="button"
-      aria-expanded={!collapsedPanels.has(panelId)}
-      onClick={() =>
-        setCollapsedPanels((current) => {
-          const next = new Set(current);
-          if (next.has(panelId)) next.delete(panelId);
-          else next.add(panelId);
-          return next;
-        })
-      }
-      className="shrink-0 cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-50"
-    >
-      {collapsedPanels.has(panelId) ? 'Expand' : 'Collapse'}
-    </button>
-  );
+  const panelToggle = (panelId: string) => {
+    const isCollapsed = collapsedPanels.has(panelId);
+    const label = isCollapsed ? 'Expand section' : 'Collapse section';
+
+    return (
+      <button
+        type="button"
+        aria-label={label}
+        aria-expanded={!isCollapsed}
+        title={label}
+        onClick={() =>
+          setCollapsedPanels((current) => {
+            const next = new Set(current);
+            if (next.has(panelId)) next.delete(panelId);
+            else next.add(panelId);
+            return next;
+          })
+        }
+        className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+      >
+        {isCollapsed ? (
+          <ChevronRight className="h-4 w-4" />
+        ) : (
+          <ChevronDown className="h-4 w-4" />
+        )}
+      </button>
+    );
+  };
 
   const beginEdit = (section: TabKey) => {
     if (isViewOnly || editingSection !== null) return;
@@ -1620,44 +1633,48 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <span className="text-xs font-bold text-slate-800">
                 Compare formulas
               </span>
-              <button
-                type="button"
-                disabled={
-                  project.formulas.filter((formula) =>
-                    comparisonFormulaIds.has(formula.id)
-                  ).length < 2
-                }
-                onClick={() => setShowFormulaComparison((show) => !show)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold disabled:opacity-40"
-              >
-                {showFormulaComparison ? 'Hide Comparison' : 'Compare Selected'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={
+                    project.formulas.filter((formula) =>
+                      comparisonFormulaIds.has(formula.id)
+                    ).length < 2
+                  }
+                  onClick={() => setShowFormulaComparison((show) => !show)}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold disabled:opacity-40"
+                >
+                  {showFormulaComparison ? 'Hide Comparison' : 'Compare Selected'}
+                </button>
+                {panelToggle('formula-comparison')}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-3">
-              {project.formulas.map((formula) => (
-                <label key={formula.id} className="flex items-center gap-1.5 text-xs">
-                  <input
-                    type="checkbox"
-                    disabled={isViewOnly}
-                    checked={comparisonFormulaIds.has(formula.id)}
-                    onChange={(event) =>
-                      setComparisonFormulaIds((current) => {
-                        const next = new Set(current);
-                        if (event.target.checked) next.add(formula.id);
-                        else next.delete(formula.id);
-                        return next;
-                      })
-                    }
-                    className="accent-teal-600"
-                  />
-                  {formula.ver} {formula.code ? `(${formula.code})` : ''}
-                </label>
-              ))}
-            </div>
-            {showFormulaComparison &&
-              project.formulas.filter((formula) =>
-                comparisonFormulaIds.has(formula.id)
-              ).length > 1 && (
+            <div hidden={collapsedPanels.has('formula-comparison')}>
+              <div className="flex flex-wrap gap-3">
+                {project.formulas.map((formula) => (
+                  <label key={formula.id} className="flex items-center gap-1.5 text-xs">
+                    <input
+                      type="checkbox"
+                      disabled={isViewOnly}
+                      checked={comparisonFormulaIds.has(formula.id)}
+                      onChange={(event) =>
+                        setComparisonFormulaIds((current) => {
+                          const next = new Set(current);
+                          if (event.target.checked) next.add(formula.id);
+                          else next.delete(formula.id);
+                          return next;
+                        })
+                      }
+                      className="accent-teal-600"
+                    />
+                    {formula.ver} {formula.code ? `(${formula.code})` : ''}
+                  </label>
+                ))}
+              </div>
+              {showFormulaComparison &&
+                project.formulas.filter((formula) =>
+                  comparisonFormulaIds.has(formula.id)
+                ).length > 1 && (
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="w-full text-xs text-left">
                     <tbody className="divide-y divide-slate-100">
@@ -1707,6 +1724,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   </table>
                 </div>
               )}
+            </div>
           </section>
 
           <div className="space-y-5">

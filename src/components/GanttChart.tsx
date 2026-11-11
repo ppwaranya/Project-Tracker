@@ -237,11 +237,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                     onClick={() => togglePhase(ph.k)}
                     className="border-b border-slate-200 bg-slate-50/90 hover:bg-amber-50/50 transition-colors cursor-pointer"
                   >
-                    <td className="sticky left-0 z-10 bg-slate-50/95 px-3 py-2 font-bold text-slate-900 border-r border-slate-200 truncate">
-                      <div className="flex items-center gap-2">
+                    <td className="sticky left-0 z-10 bg-slate-50/95 px-3 py-2 font-bold text-slate-900 border-r border-slate-200">
+                      <div className="flex items-start gap-2">
                         <button
                           type="button"
-                          className="p-0.5 rounded-md hover:bg-slate-200 text-slate-500"
+                          className="mt-0.5 shrink-0 rounded-md p-0.5 hover:bg-slate-200 text-slate-500"
                         >
                           {isCollapsed ? (
                             <ChevronRight className="w-3.5 h-3.5" />
@@ -253,11 +253,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                           className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
                           style={{ backgroundColor: color }}
                         />
-                        <span className="truncate">
+                        <span className="min-w-0 whitespace-normal break-words leading-snug">
                           {ph.k}. {PHASE_NAMES_EN[ph.k] || ph.name}
                         </span>
                         {isCollapsed && (
-                          <span className="text-[10px] text-slate-400 font-normal">
+                          <span className="shrink-0 text-[10px] text-slate-400 font-normal">
                             ({ph.tasks.length} tasks)
                           </span>
                         )}
@@ -320,17 +320,17 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                           className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors"
                         >
                           <td
-                            className="sticky left-0 z-10 bg-white px-3 py-1.5 text-slate-700 border-r border-slate-200 text-xs truncate max-w-[260px]"
+                            className="sticky left-0 z-10 bg-white px-3 py-1.5 text-slate-700 border-r border-slate-200 text-xs align-top"
                             title={t.name}
                           >
-                            <div className="flex items-center gap-1.5 pl-5">
+                            <div className="flex items-start gap-1.5 pl-5">
                               <span
-                                className={`w-1.5 h-1.5 rounded-full ${
+                                className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
                                   t.done ? 'bg-emerald-500' : 'bg-slate-300'
                                 }`}
                               />
                               <span
-                                className={`truncate ${
+                                className={`min-w-0 whitespace-normal break-words leading-snug ${
                                   t.done
                                     ? 'line-through text-slate-400'
                                     : 'text-slate-700 font-medium'
