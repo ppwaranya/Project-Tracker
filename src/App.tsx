@@ -8,7 +8,6 @@ import {
   uid,
 } from './lib/trackerLogic';
 import { GoogleSheetsService, SyncState } from './lib/googleSheetsService';
-import { initAuth } from './lib/auth';
 import { UserAuthService } from './lib/userAuthService';
 import { Header } from './components/Header';
 import { ProjectList } from './components/ProjectList';
@@ -214,8 +213,6 @@ export default function App() {
   );
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
 
-  const [user, setUser] = useState<User | null>(null);
-
   // Cost Privacy Mode (Presentation Mode) - Default loaded from localStorage
   const [costPrivacy, setCostPrivacy] = useState<boolean>(() => {
     return localStorage.getItem('launch_tracker_cost_privacy') === 'true';
@@ -279,6 +276,7 @@ export default function App() {
 
   // ดึงข้อมูลโครงการและวันหยุดจาก Google Sheets
   const syncWithGoogleSheets = async () => {
+    if (isDirtyRef.current) return;
     setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
     try {
       const remoteProjects = await GoogleSheetsService.loadProjects();
@@ -307,7 +305,7 @@ export default function App() {
     }
   };
 
-  // บังคับดันข้อมูลจากเครื่องนี้ขึ้น Google Sheets ทันที (Force Sync)
+  // ดันข้อมูลจากเครื่องนี้ขึ้น Google Sheets ทันที (Force Sync)
   const forcePushToGoogleSheets = async () => {
     setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
     try {
@@ -342,41 +340,19 @@ export default function App() {
     }
   };
 
-  // เมื่อเปิดเว็บ ตรวจสอบว่าในชีตมีข้อมูลหรือยัง ถ้ายังว่าง ให้ดันข้อมูลที่มีอยู่ขึ้นทันที
+  // เปิดเว็บมาครั้งแรก ให้โหลดข้อมูลจากชีตทันที
   useEffect(() => {
-    const initSync = async () => {
-      try {
-        const remote = await GoogleSheetsService.loadProjects();
-        if (!remote || remote.length === 0) {
-          // หากบน Google Sheets ยังว่างเปล่า ให้ส่งโปรเจกต์จากเครื่องนี้ขึ้นไปเก็บเป็นฐานข้อมูลแรก
-          await forcePushToGoogleSheets();
-        } else {
-          setProjects(remote);
-          setSyncState((prev) => ({
-            ...prev,
-            isSynced: true,
-            lastSyncedAt: new Date(),
-          }));
-        }
-      } catch (e) {
-        // Fallback ให้ใช้งาน Local ได้
-      }
-    };
-    initSync();
+    syncWithGoogleSheets();
   }, []);
 
-  // วนรอบดึงข้อมูลใหม่ทุก 30 วินาที และเมื่อสลับแท็บกลับมา
+  // วนรอบดึงข้อมูลใหม่ทุก 10 วินาที (10,000 ms) และดึงทันทีเมื่อสลับแท็บกลับมา
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!isDirtyRef.current) {
-        syncWithGoogleSheets();
-      }
-    }, 30000);
+      syncWithGoogleSheets();
+    }, 10000);
 
     const onFocus = () => {
-      if (!isDirtyRef.current) {
-        syncWithGoogleSheets();
-      }
+      syncWithGoogleSheets();
     };
 
     window.addEventListener('focus', onFocus);
@@ -593,7 +569,6 @@ export default function App() {
         currentUser={currentUser}
         onAppLogout={async () => {
           await UserAuthService.logout();
-          setUser(null);
           setCurrentUser(null);
           showToast('Signed out of Project Tracker');
         }}
@@ -606,7 +581,7 @@ export default function App() {
         onOpenHolidays={() => setIsHolidayModalOpen(true)}
       />
 
-      {/* แถบเครื่องมือควบคุมการซิงก์ด่วน (Force Sync Bar) */}
+      {/* แถบเครื่องมือควบคุมการซิงก์ด่วน */}
       <div className="max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pt-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <span className={`inline-block w-2.5 h-2.5 rounded-full ${syncState.isSyncing ? 'bg-amber-400 animate-pulse' : syncState.isSynced ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>

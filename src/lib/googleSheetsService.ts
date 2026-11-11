@@ -29,7 +29,7 @@ export class GoogleSheetsService {
     return 'google-apps-script';
   }
 
-  // ดึงข้อมูลโครงการ
+  // ดึงข้อมูลโครงการ พร้อมพารามิเตอร์ป้องกัน Browser Cache
   static async loadProjects(_accessToken?: string, _sheetId?: string): Promise<Project[]> {
     try {
       const res = await fetch(`${APPS_SCRIPT_URL}?type=projects&t=${Date.now()}`);
@@ -64,7 +64,7 @@ export class GoogleSheetsService {
     }
   }
 
-  // บันทึกโครงการลง Google Sheets
+  // บันทึกโครงการลง Google Sheets แบบ no-cors เพื่อเลี่ยงการบล็อกของเบราว์เซอร์
   static async saveAllProjects(
     _accessToken?: string,
     _sheetId?: string,
@@ -73,10 +73,9 @@ export class GoogleSheetsService {
   ): Promise<void> {
     localStorage.setItem(CACHE_KEY_PROJECTS, JSON.stringify(projects));
 
-    // ใช้ text/plain เพื่อเลี่ยง CORS Preflight และจัดการ Redirect
     await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      mode: 'no-cors', // สำคัญมาก: ป้องกันไม่ให้เบราว์เซอร์ค้างหรือติด CORS กับ Apps Script
+      mode: 'no-cors',
       headers: {
         'Content-Type': 'text/plain',
       },
