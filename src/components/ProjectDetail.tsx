@@ -15,10 +15,11 @@ import {
   DOC_TYPES,
   flatTasks,
   fmt,
-  lookup,
   PACKAGING_STATUS_LIST,
   PKG_TYPES,
   REGULATORY_STATUS_LIST,
+  resolveFormulaPrice,
+  resolvePackagingPrice,
   STATUS_LIST,
   summ,
   TEST_STATUS_LIST,
@@ -349,9 +350,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       const newFormulas = project.formulas.map((f) => {
         if (f.id !== itemId) return f;
         const newSteps = f.steps.filter((_, idx) => idx !== stepIdx);
+        let nextSelected = f.selectedStepIdx;
+        if (nextSelected === stepIdx) nextSelected = null;
+        else if (nextSelected !== undefined && nextSelected !== null && nextSelected > stepIdx) {
+          nextSelected = nextSelected - 1;
+        }
         return {
           ...f,
           steps: newSteps.length ? newSteps : [{ qty: '', price: '' }],
+          selectedStepIdx: nextSelected,
         };
       });
       update({ formulas: newFormulas });
@@ -359,9 +366,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       const newPackaging = project.packaging.map((p) => {
         if (p.id !== itemId) return p;
         const newSteps = p.steps.filter((_, idx) => idx !== stepIdx);
+        let nextSelected = p.selectedStepIdx;
+        if (nextSelected === stepIdx) nextSelected = null;
+        else if (nextSelected !== undefined && nextSelected !== null && nextSelected > stepIdx) {
+          nextSelected = nextSelected - 1;
+        }
         return {
           ...p,
           steps: newSteps.length ? newSteps : [{ qty: '', price: '' }],
+          selectedStepIdx: nextSelected,
         };
       });
       update({ packaging: newPackaging });
@@ -463,6 +476,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       date: todayISO(),
       changes: `Derived from ${sourceFormula.ver}`,
       steps: JSON.parse(JSON.stringify(sourceFormula.steps)),
+      selectedStepIdx: sourceFormula.selectedStepIdx ?? null,
       note: '',
       ingredients: sourceFormula.ingredients
         ? JSON.parse(JSON.stringify(sourceFormula.ingredients))
@@ -1691,7 +1705,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     project.formulas.find((f) => f.id === project.chosenFormula)
                       ?.ver
                   }
-                </strong>
+                </strong>{' '}
+                · สามารถกดเลือกสูตรและขั้นราคาได้อิสระโดยไม่ต้องกด Edit
               </p>
             </div>
 
@@ -1708,6 +1723,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       date: todayISO(),
                       changes: '',
                       steps: last ? JSON.parse(JSON.stringify(last.steps)) : [{ qty: '', price: '' }],
+                      selectedStepIdx: null,
                       note: '',
                       images: [],
                       imageNote: '',
@@ -1833,14 +1849,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               .reverse()
               .map((f) => {
                 const isChosen = f.id === project.chosenFormula;
-                const formulaPriceRes = lookup(f.steps, Number(project.qty) || 0);
+                const formulaPriceRes = resolveFormulaPrice(f, Number(project.qty) || 0);
 
                 const originalIndex = project.formulas.findIndex((x) => x.id === f.id);
                 let deltaText = '';
                 if (originalIndex > 0) {
                   const prevFormula = project.formulas[originalIndex - 1];
-                  const prevPriceRes = lookup(
-                    prevFormula.steps,
+                  const prevPriceRes = resolveFormulaPrice(
+                    prevFormula,
                     Number(project.qty) || 0
                   );
                   if (formulaPriceRes.has && prevPriceRes.has) {
@@ -1886,11 +1902,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       {panelActions(`formula-${f.id}`)}
                     </div>
                     <div hidden={collapsedPanels.has(`formula-${f.id}`)}>
-                    <fieldset disabled={!canEdit(`formula-${f.id}`)} className="contents">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 pt-3">
                       <div className="flex items-center gap-2.5 flex-wrap">
                         <input
                           type="text"
+                          disabled={!canEdit(`formula-${f.id}`)}
                           value={f.ver}
                           onChange={(e) => {
                             const newFs = project.formulas.map((x) =>
@@ -1898,7 +1914,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             );
                             update({ formulas: newFs });
                           }}
-                          className="w-16 font-extrabold text-slate-900 px-2 py-1 rounded-xl border border-slate-200 bg-slate-50 text-sm text-center"
+                          className="w-16 font-extrabold text-slate-900 px-2 py-1 rounded-xl border border-slate-200 bg-slate-50 text-sm text-center disabled:opacity-80"
                         />
 
                         <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">
@@ -1907,6 +1923,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           </span>
                           <input
                             type="text"
+                            disabled={!canEdit(`formula-${f.id}`)}
                             value={f.code || ''}
                             onChange={(e) => {
                               const newFs = project.formulas.map((x) =>
@@ -1915,12 +1932,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               update({ formulas: newFs });
                             }}
                             placeholder=""
-                            className="w-28 text-xs font-bold text-slate-800 bg-transparent focus:outline-hidden"
+                            className="w-28 text-xs font-bold text-slate-800 bg-transparent focus:outline-hidden disabled:opacity-80"
                           />
                         </div>
 
                         <input
                           type="date"
+                          disabled={!canEdit(`formula-${f.id}`)}
                           value={f.date}
                           onChange={(e) => {
                             const newFs = project.formulas.map((x) =>
@@ -1928,7 +1946,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             );
                             update({ formulas: newFs });
                           }}
-                          className="text-xs px-2.5 py-1 rounded-xl border border-slate-200 bg-white"
+                          className="text-xs px-2.5 py-1 rounded-xl border border-slate-200 bg-white disabled:opacity-80"
                         />
 
                         <div className="flex items-center gap-2 pl-2">
@@ -1975,7 +1993,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 ? { ...x, isConfirmed: !x.isConfirmed }
                                 : x
                             );
-                            update({ formulas: newFs });
+                            updateImmediately({ formulas: newFs });
                           }}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
                             f.isConfirmed
@@ -1987,14 +2005,23 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           <span>Confirm Formulation</span>
                         </button>
 
-                        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer">
+                        {/* ปุ่ม Use for Costing กดเลือกสูตรคิดต้นทุนได้อิสระทันที */}
+                        <label
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-colors ${
+                            isViewOnly
+                              ? 'bg-slate-50 border-slate-200 opacity-60'
+                              : isChosen
+                              ? 'bg-amber-50 border-amber-400 text-amber-950 cursor-pointer shadow-2xs'
+                              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 cursor-pointer'
+                          }`}
+                        >
                           <input
                             type="radio"
                             disabled={isViewOnly}
                             name="chosenFormula"
                             checked={isChosen}
-                            onChange={() => update({ chosenFormula: f.id })}
-                            className="accent-amber-500"
+                            onChange={() => updateImmediately({ chosenFormula: f.id })}
+                            className="accent-amber-500 cursor-pointer"
                           />
                           <span>Use for Costing</span>
                         </label>
@@ -2024,6 +2051,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     date: todayISO(),
                                     changes: '',
                                     steps: [{ qty: '', price: '' }],
+                                    selectedStepIdx: null,
                                     note: '',
                                     ingredients: [],
                                     images: [],
@@ -2053,6 +2081,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           </label>
                           <textarea
                             rows={3}
+                            disabled={!canEdit(`formula-${f.id}`)}
                             value={f.changes}
                             onChange={(e) => {
                               const newFs = project.formulas.map((x) =>
@@ -2063,7 +2092,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               update({ formulas: newFs });
                             }}
                             placeholder=""
-                            className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
+                            className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white disabled:opacity-80"
                           />
                         </div>
 
@@ -2169,6 +2198,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             </label>
                             <input
                               type="text"
+                              disabled={!canEdit(`formula-${f.id}`)}
                               value={f.imageNote || ''}
                               onChange={(e) => {
                                 const newFs = project.formulas.map((x) =>
@@ -2177,20 +2207,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 update({ formulas: newFs });
                               }}
                               placeholder=""
-                              className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white"
+                              className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white disabled:opacity-80"
                             />
                           </div>
                         </div>
                       </div>
 
+                      {/* กล่อง Tiered Pricing ของสูตร — กดเลือก Tier ราคาได้อิสระโดยไม่ต้องกด Edit */}
                       <div className="bg-slate-50/90 p-4 rounded-2xl border border-slate-200 space-y-2.5">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <span className="text-xs font-bold text-slate-800">
                             Tiered Pricing (ราคาขั้นบันได)
                           </span>
                           <label className="text-[11px] text-slate-600 flex items-center gap-1">
-                            Per order qty · VAT
+                            VAT
                             <select
+                              disabled={!canEdit(`formula-${f.id}`)}
                               value={f.vatIncluded ? 'included' : 'excluded'}
                               onChange={(event) => {
                                 const newFs = project.formulas.map((formula) =>
@@ -2200,13 +2232,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 );
                                 update({ formulas: newFs });
                               }}
-                              className="px-2 py-1 rounded-lg border border-slate-200 bg-white"
+                              className="px-2 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-70"
                             >
                               <option value="excluded">Not included</option>
                               <option value="included">Included</option>
                             </select>
                           </label>
                         </div>
+
+                        <p className="text-[11px] font-medium text-amber-700">
+                          (ติ๊กเลือก Tier ราคาที่ใช้คิดต้นทุนได้ทันที)
+                        </p>
 
                         {costPrivacy ? (
                           <div className="py-8 text-center text-xs text-slate-400 bg-white rounded-xl border border-slate-200 font-mono">
@@ -2217,79 +2253,123 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             <table className="w-full text-xs text-left">
                               <thead>
                                 <tr className="text-slate-500 font-bold border-b border-slate-200 text-[11px]">
+                                  <th className="py-1 w-14 text-center">เลือกใช้</th>
                                   <th className="py-1">From (Units)</th>
                                   <th className="py-1">Price (THB/pc)</th>
-                                  <th className="py-1 w-8"></th>
+                                  {canEdit(`formula-${f.id}`) && <th className="py-1 w-8"></th>}
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
-                                {f.steps.map((st, sidx) => (
-                                  <tr key={sidx}>
-                                    <td className="py-1 pr-1">
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        value={st.qty}
-                                        onChange={(e) =>
-                                          updateStep(
-                                            'formulas',
-                                            f.id,
-                                            sidx,
-                                            'qty',
-                                            e.target.value
-                                          )
-                                        }
-                                        placeholder=""
-                                        className="w-full px-2.5 py-1 rounded-lg border border-slate-200 bg-white font-medium"
-                                      />
-                                    </td>
-                                    <td className="py-1 pr-1">
-                                      <input
-                                        type="number"
-                                        step="any"
-                                        min="0"
-                                        value={st.price}
-                                        onChange={(e) =>
-                                          updateStep(
-                                            'formulas',
-                                            f.id,
-                                            sidx,
-                                            'price',
-                                            e.target.value
-                                          )
-                                        }
-                                        placeholder=""
-                                        className="w-full px-2.5 py-1 rounded-lg border border-slate-200 bg-white font-medium"
-                                      />
-                                    </td>
-                                    <td className="py-1 text-center">
-                                      <button
-                                        onClick={() =>
-                                          deleteStep('formulas', f.id, sidx)
-                                        }
-                                        className="text-slate-400 hover:text-rose-600 text-sm"
-                                        title="Delete step"
-                                      >
-                                        ×
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))}
+                                {f.steps.map((st, sidx) => {
+                                  const isSelectedTier = formulaPriceRes.selectedIdx === sidx;
+                                  return (
+                                    <tr
+                                      key={sidx}
+                                      className={`transition-colors ${
+                                        isSelectedTier ? 'bg-amber-50/90' : ''
+                                      }`}
+                                    >
+                                      <td className="py-1 text-center">
+                                        <input
+                                          type="radio"
+                                          name={`formula-tier-${f.id}`}
+                                          disabled={isViewOnly}
+                                          checked={isSelectedTier}
+                                          onChange={() => {
+                                            const newFs = project.formulas.map((x) =>
+                                              x.id === f.id
+                                                ? { ...x, selectedStepIdx: sidx }
+                                                : x
+                                            );
+                                            updateImmediately({ formulas: newFs });
+                                          }}
+                                          title="เลือกใช้ราคานี้คำนวณต้นทุน"
+                                          className="w-4 h-4 accent-amber-500 cursor-pointer"
+                                        />
+                                      </td>
+                                      <td className="py-1 pr-1">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          disabled={!canEdit(`formula-${f.id}`)}
+                                          value={st.qty}
+                                          onChange={(e) =>
+                                            updateStep(
+                                              'formulas',
+                                              f.id,
+                                              sidx,
+                                              'qty',
+                                              e.target.value
+                                            )
+                                          }
+                                          placeholder=""
+                                          className={`w-full px-2.5 py-1 rounded-lg border bg-white font-medium disabled:opacity-80 ${
+                                            isSelectedTier
+                                              ? 'border-amber-400 font-bold text-amber-950'
+                                              : 'border-slate-200'
+                                          }`}
+                                        />
+                                      </td>
+                                      <td className="py-1 pr-1">
+                                        <input
+                                          type="number"
+                                          step="any"
+                                          min="0"
+                                          disabled={!canEdit(`formula-${f.id}`)}
+                                          value={st.price}
+                                          onChange={(e) =>
+                                            updateStep(
+                                              'formulas',
+                                              f.id,
+                                              sidx,
+                                              'price',
+                                              e.target.value
+                                            )
+                                          }
+                                          placeholder=""
+                                          className={`w-full px-2.5 py-1 rounded-lg border bg-white font-medium disabled:opacity-80 ${
+                                            isSelectedTier
+                                              ? 'border-amber-400 font-bold text-amber-950'
+                                              : 'border-slate-200'
+                                          }`}
+                                        />
+                                      </td>
+                                      {canEdit(`formula-${f.id}`) && (
+                                        <td className="py-1 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              deleteStep('formulas', f.id, sidx)
+                                            }
+                                            className="text-slate-400 hover:text-rose-600 text-sm cursor-pointer"
+                                            title="Delete step"
+                                          >
+                                            ×
+                                          </button>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
 
-                            <button
-                              onClick={() => addStep('formulas', f.id)}
-                              className="text-xs text-teal-700 hover:underline font-bold cursor-pointer pt-1"
-                            >
-                              + Add Price Tier
-                            </button>
+                            {canEdit(`formula-${f.id}`) && (
+                              <button
+                                type="button"
+                                onClick={() => addStep('formulas', f.id)}
+                                className="text-xs text-teal-700 hover:underline font-bold cursor-pointer pt-1"
+                              >
+                                + Add Price Tier
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
                     </div>
 
-                    <div className="pt-4 border-t border-slate-100 space-y-2.5">
+                    <fieldset disabled={!canEdit(`formula-${f.id}`)} className="contents">
+                    <div className="pt-4 border-t border-slate-100 space-y-2.5 mt-4">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
                           <Sparkles className="w-4 h-4 text-amber-500" />
@@ -2530,7 +2610,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 Packaging & Materials Specifications
               </h3>
               <p className="text-xs text-slate-500">
-                {project.packaging.length} packaging components tracked
+                {project.packaging.length} packaging components tracked · สามารถกดติ๊ก Include และเลือกขั้นราคาได้ทันทีโดยไม่ต้องกด Edit
               </p>
             </div>
 
@@ -2547,6 +2627,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       supplier: '',
                       moq: '',
                       steps: [{ qty: '', price: '' }],
+                      selectedStepIdx: null,
                       note: '',
                       images: [],
                       plateCost: '',
@@ -2575,7 +2656,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </div>
             ) : (
               project.packaging.map((it) => {
-                const pkgPriceRes = lookup(it.steps, Number(project.qty) || 0);
+                const pkgPriceRes = resolvePackagingPrice(it, Number(project.qty) || 0);
                 const packagePanelId = `packaging-${it.id}`;
                 const isBelowMoq =
                   project.qty &&
@@ -2593,10 +2674,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   >
                     <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
                       <div className="flex items-center gap-3 flex-wrap">
-                        <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 transition-colors">
+                        {/* กดติ๊ก Include in Cost Calculation ได้อิสระทันทีโดยไม่ต้องกด Edit */}
+                        <label
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-colors ${
+                            isViewOnly
+                              ? 'bg-slate-50 border-slate-200 opacity-60'
+                              : it.selectedForCost !== false
+                              ? 'bg-teal-50/70 hover:bg-teal-100/70 border-teal-300 cursor-pointer'
+                              : 'bg-slate-50 hover:bg-slate-100 border-slate-200 cursor-pointer'
+                          }`}
+                        >
                           <input
                             type="checkbox"
-                            disabled={!canEdit(packagePanelId)}
+                            disabled={isViewOnly}
                             checked={it.selectedForCost !== false}
                             onChange={(e) => {
                               const copy = project.packaging.map((x) =>
@@ -2604,7 +2694,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   ? { ...x, selectedForCost: e.target.checked }
                                   : x
                               );
-                              update({ packaging: copy });
+                              updateImmediately({ packaging: copy });
                             }}
                             className="w-4 h-4 accent-teal-600 rounded-sm cursor-pointer disabled:opacity-50"
                           />
@@ -2900,12 +2990,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         />
                       </div>
                     </div>
+                    </fieldset>
 
+                    {/* ส่วน Tiered Pricing Ladder กดเลือก Tier ราคาได้อิสระโดยไม่ต้องกด Edit */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
-                        <span className="text-xs font-bold text-slate-800 block">
-                          Tiered Pricing Ladder
-                        </span>
+                        <div className="flex items-center justify-between flex-wrap gap-1">
+                          <span className="text-xs font-bold text-slate-800">
+                            Tiered Pricing Ladder
+                          </span>
+                          <span className="text-[11px] font-medium text-teal-700">
+                            (ติ๊กเลือก Tier ราคาที่ใช้คิดต้นทุนได้ทันที)
+                          </span>
+                        </div>
 
                         {costPrivacy ? (
                           <div className="py-4 text-center text-xs text-slate-400 bg-white rounded-xl border border-slate-200 font-mono">
@@ -2916,75 +3013,116 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             <table className="w-full text-xs text-left">
                               <thead>
                                 <tr className="text-slate-500 font-bold border-b border-slate-200 text-[11px]">
+                                  <th className="py-1 w-14 text-center">เลือกใช้</th>
                                   <th className="py-1">From (Units)</th>
                                   <th className="py-1">Price (THB/pc)</th>
-                                  <th className="py-1 w-8"></th>
+                                  {canEdit(packagePanelId) && <th className="py-1 w-8"></th>}
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
-                                {it.steps.map((st, sidx) => (
-                                  <tr key={sidx}>
-                                    <td className="py-1 pr-1">
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        value={st.qty}
-                                        onChange={(e) =>
-                                          updateStep(
-                                            'packaging',
-                                            it.id,
-                                            sidx,
-                                            'qty',
-                                            e.target.value
-                                          )
-                                        }
-                                        placeholder=""
-                                        className="w-full px-2.5 py-1 rounded-lg border border-slate-200 bg-white"
-                                      />
-                                    </td>
-                                    <td className="py-1 pr-1">
-                                      <input
-                                        type="number"
-                                        step="any"
-                                        min="0"
-                                        value={st.price}
-                                        onChange={(e) =>
-                                          updateStep(
-                                            'packaging',
-                                            it.id,
-                                            sidx,
-                                            'price',
-                                            e.target.value
-                                          )
-                                        }
-                                        placeholder=""
-                                        className="w-full px-2.5 py-1 rounded-lg border border-slate-200 bg-white"
-                                      />
-                                    </td>
-                                    <td className="py-1 text-center">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          deleteStep('packaging', it.id, sidx)
-                                        }
-                                        className="text-slate-400 hover:text-rose-600 text-sm"
-                                        title="Delete step"
-                                      >
-                                        ×
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))}
+                                {it.steps.map((st, sidx) => {
+                                  const isSelectedTier = pkgPriceRes.selectedIdx === sidx;
+                                  return (
+                                    <tr
+                                      key={sidx}
+                                      className={`transition-colors ${
+                                        isSelectedTier ? 'bg-teal-50/80' : ''
+                                      }`}
+                                    >
+                                      <td className="py-1 text-center">
+                                        <input
+                                          type="radio"
+                                          name={`pkg-tier-${it.id}`}
+                                          disabled={isViewOnly}
+                                          checked={isSelectedTier}
+                                          onChange={() => {
+                                            const copy = project.packaging.map((x) =>
+                                              x.id === it.id
+                                                ? { ...x, selectedStepIdx: sidx }
+                                                : x
+                                            );
+                                            updateImmediately({ packaging: copy });
+                                          }}
+                                          title="เลือกใช้ราคานี้คำนวณต้นทุน"
+                                          className="w-4 h-4 accent-teal-600 cursor-pointer"
+                                        />
+                                      </td>
+                                      <td className="py-1 pr-1">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          disabled={!canEdit(packagePanelId)}
+                                          value={st.qty}
+                                          onChange={(e) =>
+                                            updateStep(
+                                              'packaging',
+                                              it.id,
+                                              sidx,
+                                              'qty',
+                                              e.target.value
+                                            )
+                                          }
+                                          placeholder=""
+                                          className={`w-full px-2.5 py-1 rounded-lg border bg-white disabled:opacity-80 ${
+                                            isSelectedTier
+                                              ? 'border-teal-400 font-bold text-teal-950'
+                                              : 'border-slate-200'
+                                          }`}
+                                        />
+                                      </td>
+                                      <td className="py-1 pr-1">
+                                        <input
+                                          type="number"
+                                          step="any"
+                                          min="0"
+                                          disabled={!canEdit(packagePanelId)}
+                                          value={st.price}
+                                          onChange={(e) =>
+                                            updateStep(
+                                              'packaging',
+                                              it.id,
+                                              sidx,
+                                              'price',
+                                              e.target.value
+                                            )
+                                          }
+                                          placeholder=""
+                                          className={`w-full px-2.5 py-1 rounded-lg border bg-white disabled:opacity-80 ${
+                                            isSelectedTier
+                                              ? 'border-teal-400 font-bold text-teal-950'
+                                              : 'border-slate-200'
+                                          }`}
+                                        />
+                                      </td>
+                                      {canEdit(packagePanelId) && (
+                                        <td className="py-1 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              deleteStep('packaging', it.id, sidx)
+                                            }
+                                            className="text-slate-400 hover:text-rose-600 text-sm cursor-pointer"
+                                            title="Delete step"
+                                          >
+                                            ×
+                                          </button>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
 
-                            <button
-                              type="button"
-                              onClick={() => addStep('packaging', it.id)}
-                              className="text-xs text-teal-700 hover:underline font-bold cursor-pointer"
-                            >
-                              + Add Price Tier
-                            </button>
+                            {canEdit(packagePanelId) && (
+                              <button
+                                type="button"
+                                onClick={() => addStep('packaging', it.id)}
+                                className="text-xs text-teal-700 hover:underline font-bold cursor-pointer"
+                              >
+                                + Add Price Tier
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -3087,6 +3225,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
                         <input
                           type="text"
+                          disabled={!canEdit(packagePanelId)}
                           value={it.note}
                           onChange={(e) => {
                             const copy = project.packaging.map((x) =>
@@ -3095,11 +3234,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             update({ packaging: copy });
                           }}
                           placeholder=""
-                          className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white"
+                          className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white disabled:opacity-70"
                         />
                       </div>
                     </div>
-                    </fieldset>
                     </div>
                   </div>
                 );
@@ -3221,7 +3359,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
                       return (
                         <tr key={o.id} className="hover:bg-slate-50/70 align-top">
-                          {/* 1. ดีเทลว่าคืออะไร */}
                           <td className="p-2 pl-3.5">
                             <input
                               type="text"
@@ -3236,7 +3373,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             />
                           </td>
 
-                          {/* 2. ราคาเท่าไหร่ + VAT */}
                           <td className="p-2">
                             {costPrivacy ? (
                               <input
@@ -3278,7 +3414,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             </select>
                           </td>
 
-                          {/* 3. ต่อจำนวนเท่าไหร่ */}
                           <td className="p-2">
                             <input
                               type="number"
@@ -3302,7 +3437,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             </span>
                           </td>
 
-                          {/* 4. หน่วยนับ */}
                           <td className="p-2">
                             <input
                               type="text"
@@ -3325,7 +3459,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             </span>
                           </td>
 
-                          {/* 5. ผลรวม */}
                           <td className="p-2 text-right tabular-nums">
                             {costPrivacy ? (
                               <span className="text-slate-400 font-mono">••••••</span>
@@ -3345,7 +3478,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             )}
                           </td>
 
-                          {/* 6. Notes */}
                           <td className="p-2">
                             <input
                               type="text"

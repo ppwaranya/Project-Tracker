@@ -147,7 +147,6 @@ export const dow = (s: string): number => pd(s).getUTCDay();
 export const diffD = (a: string, b: string): number =>
   Math.round((pd(b).getTime() - pd(a).getTime()) / 864e5);
 
-// Dates in English and CE (ค.ศ.), e.g. "15 Jan 2026"
 export const fmt = (s: string | null | undefined): string => {
   if (!s) return '-';
   const a = s.split('-').map(Number);
@@ -309,6 +308,7 @@ export function makeProject(cat?: 'อาหารเสริม' | 'สกิ�
         date: todayISO(),
         changes: 'สูตรตั้งต้น',
         steps: [{ qty: '', price: '' }],
+        selectedStepIdx: null,
         note: '',
         images: [],
         imageNote: '',
@@ -444,6 +444,86 @@ export function lookup(
   return { price: pick.p, has: true, step: pick.q };
 }
 
+export function resolvePackagingPrice(
+  it: PackagingItem,
+  q: number
+): { price: number; has: boolean; selectedIdx: number | null } {
+  const steps = it.steps || [];
+  if (
+    it.selectedStepIdx !== undefined &&
+    it.selectedStepIdx !== null &&
+    it.selectedStepIdx >= 0 &&
+    it.selectedStepIdx < steps.length
+  ) {
+    const picked = steps[it.selectedStepIdx];
+    if (picked && picked.price !== '' && !isNaN(Number(picked.price))) {
+      return {
+        price: Number(picked.price),
+        has: true,
+        selectedIdx: it.selectedStepIdx,
+      };
+    }
+  }
+
+  const auto = lookup(steps, q);
+  let matchedIdx: number | null = null;
+  if (auto.has && auto.step !== undefined) {
+    const found = steps.findIndex(
+      (s) => s.qty !== '' && Number(s.qty) === auto.step && Number(s.price) === auto.price
+    );
+    if (found >= 0) matchedIdx = found;
+  } else if (auto.has && steps.length > 0) {
+    const firstValid = steps.findIndex((s) => s.price !== '' && !isNaN(Number(s.price)));
+    if (firstValid >= 0) matchedIdx = firstValid;
+  }
+
+  return {
+    price: auto.price,
+    has: auto.has,
+    selectedIdx: matchedIdx,
+  };
+}
+
+export function resolveFormulaPrice(
+  f: Formula,
+  q: number
+): { price: number; has: boolean; selectedIdx: number | null } {
+  const steps = f.steps || [];
+  if (
+    f.selectedStepIdx !== undefined &&
+    f.selectedStepIdx !== null &&
+    f.selectedStepIdx >= 0 &&
+    f.selectedStepIdx < steps.length
+  ) {
+    const picked = steps[f.selectedStepIdx];
+    if (picked && picked.price !== '' && !isNaN(Number(picked.price))) {
+      return {
+        price: Number(picked.price),
+        has: true,
+        selectedIdx: f.selectedStepIdx,
+      };
+    }
+  }
+
+  const auto = lookup(steps, q);
+  let matchedIdx: number | null = null;
+  if (auto.has && auto.step !== undefined) {
+    const found = steps.findIndex(
+      (s) => s.qty !== '' && Number(s.qty) === auto.step && Number(s.price) === auto.price
+    );
+    if (found >= 0) matchedIdx = found;
+  } else if (auto.has && steps.length > 0) {
+    const firstValid = steps.findIndex((s) => s.price !== '' && !isNaN(Number(s.price)));
+    if (firstValid >= 0) matchedIdx = firstValid;
+  }
+
+  return {
+    price: auto.price,
+    has: auto.has,
+    selectedIdx: matchedIdx,
+  };
+}
+
 export function depOpts(
   earlier: Task[]
 ): [string, string][] {
@@ -458,13 +538,11 @@ export function depOpts(
   return o;
 }
 
-// ตรวจสอบว่าเป็นหน่วยต่อชิ้นหรือไม่
 export function isPerPieceUnit(unit: string): boolean {
   const u = (unit || '').trim().toLowerCase();
   return ['ชิ้น', 'piece', 'pc', 'pcs', 'ซอง', 'กล่อง', 'ขวด', 'กระปุก', 'หลอด', 'แคปซูล', 'เม็ด'].includes(u);
 }
 
-// คำนวณผลรวมของรายการค่าใช้จ่ายอื่นๆ (รวม VAT แล้ว)
 export function calcOtherItemTotal(
   o: { amount: string | number; unit: string; perQty?: string | number; times?: string | number; vatIncluded?: boolean }
 ): { value: number; isPerPiece: boolean; perQtyVal: number } {
@@ -475,14 +553,12 @@ export function calcOtherItemTotal(
   const perPiece = isPerPieceUnit(o.unit);
 
   if (perPiece) {
-    // กลุ่มต่อชิ้น: ราคา / ต่อจำนวน (เช่น 50 บาท ต่อ 10 ชิ้น = 5 บาท/ชิ้น)
     return {
       value: (price / perQtyVal) * vatMult,
       isPerPiece: true,
       perQtyVal,
     };
   } else {
-    // กลุ่มต่อครั้ง/รอบ: ราคา × จำนวนครั้ง/รอบ (เช่น 2,500 บาท × 2 เที่ยว = 5,000 บาท)
     return {
       value: price * perQtyVal * vatMult,
       isPerPiece: false,
@@ -502,7 +578,7 @@ export function otherPer(
   if (isPerPieceUnit(o.unit)) {
     return price / perQtyVal;
   }
-  return 0; // รายการต่อครั้ง/รอบ จะแยกไปคิดใน additionalCost ไม่นำไปหารต่อชิ้น
+  return 0;
 }
 
 export function costOf(p: Project): CostSummaryResult {
@@ -510,7 +586,7 @@ export function costOf(p: Project): CostSummaryResult {
   const f =
     p.formulas.find((x) => x.id === p.chosenFormula) ||
     p.formulas[p.formulas.length - 1];
-  const fr = lookup(f.steps, q);
+  const fr = resolveFormulaPrice(f, q);
   let packagingSubtotal = 0;
   let packagingVat = 0;
   let otherUnitSubtotal = 0;
@@ -522,7 +598,7 @@ export function costOf(p: Project): CostSummaryResult {
   const activePackaging = p.packaging.filter((it) => it.selectedForCost !== false);
 
   activePackaging.forEach((it) => {
-    const r = lookup(it.steps, q);
+    const r = resolvePackagingPrice(it, q);
     packagingSubtotal += r.price;
     if (it.plateCost && Number(it.plateCost) > 0) {
       plateTotal += Number(it.plateCost);
@@ -545,12 +621,10 @@ export function costOf(p: Project): CostSummaryResult {
     const perQtyVal = rawQty > 0 ? rawQty : 1;
 
     if (isPerPieceUnit(o.unit)) {
-      // เฉลี่ยเป็นต่อชิ้น รวมเข้า Total Unit Cost
       const unitBase = price / perQtyVal;
       otherUnitSubtotal += unitBase;
       if (!o.vatIncluded) otherUnitVat += unitBase * VAT_RATE;
     } else {
-      // ต่อครั้ง/ต่อรอบ นำยอดทั้งก้อนไปรวมที่ Additional Cost
       const lumpSum = price * perQtyVal * (o.vatIncluded ? 1 : 1 + VAT_RATE);
       additionalCost += lumpSum;
     }
@@ -659,7 +733,6 @@ export const DEFAULT_HOLIDAYS: Holiday[] = [
   { id: 'h4', date: '2027-01-01', name: 'วันขึ้นปีใหม่' },
 ];
 
-// ฟังก์ชันบีบอัดรูปภาพให้ขนาดกะทัดรัดก่อนอัปโหลดขึ้น Google Drive
 export const compressImageFile = (
   file: File,
   maxWidth = 1000,

@@ -23,11 +23,12 @@ export interface Formula {
   date: string;
   changes: string;
   steps: StepPrice[];
+  selectedStepIdx?: number | null;
   note: string;
-  ingredients?: Ingredient[]; // Formula-specific ingredient breakdown
-  images?: string[]; // Multiple sample images
+  ingredients?: Ingredient[];
+  images?: string[];
   imageNote?: string;
-  isConfirmed?: boolean; // Confirmed formulation for commercial production
+  isConfirmed?: boolean;
   vatIncluded?: boolean;
 }
 
@@ -46,13 +47,14 @@ export interface PackagingItem {
   supplier: string;
   moq: string | number;
   steps: StepPrice[];
+  selectedStepIdx?: number | null;
   note: string;
-  images?: string[]; // Multiple packaging images/mockups
-  plateCost?: string | number; // Color plate / mold cost (amortized per unit)
-  leadTime?: string; // Production lead time
-  paymentTerm?: string; // Payment terms
-  warrantyTerms?: string; // Warranty / claims terms
-  selectedForCost?: boolean; // Selected for cost calculation
+  images?: string[];
+  plateCost?: string | number;
+  leadTime?: string;
+  paymentTerm?: string;
+  warrantyTerms?: string;
+  selectedForCost?: boolean;
   status?: PackagingStatus;
   vatIncluded?: boolean;
 }
@@ -60,10 +62,10 @@ export interface PackagingItem {
 export interface OtherCostItem {
   id: string;
   name: string;
-  unit: string; // หน่วยนับ เช่น ชิ้น, Piece, ครั้ง, รอบ, เที่ยว, ล็อต
-  amount: string | number; // ราคา (THB)
-  perQty?: string | number; // ต่อจำนวนเท่าไหร่ (เช่น 1, 100) หรือจำนวนครั้ง/รอบ
-  times?: string | number; // รองรับข้อมูลเก่า
+  unit: string;
+  amount: string | number;
+  perQty?: string | number;
+  times?: string | number;
   note: string;
   vatIncluded?: boolean;
 }
@@ -98,7 +100,7 @@ export interface RegulatoryItem {
 export interface ProductBenchmark {
   name: string;
   description: string;
-  images?: string[]; // Multiple benchmark reference images
+  images?: string[];
   targetPrice?: string;
 }
 
@@ -139,8 +141,8 @@ export interface Project {
   name: string;
   category: ProjectCategory;
   status: ProjectStatus;
-  lotNo?: string; // Production Lot #
-  fdaNo?: string; // FDA / Regulatory Registration Number (เลขที่ อย. / เลขจดแจ้ง)
+  lotNo?: string;
+  fdaNo?: string;
   owner: string;
   factory: string;
   startDate: string;
@@ -184,7 +186,7 @@ export interface CostSummaryResult {
   fhas: boolean;
   pk: number;
   ot: number;
-  additionalCost: number; // ยอดรวมค่าใช้จ่ายต่อครั้ง/ต่อรอบ (ไม่หารเฉลี่ยต่อชิ้น)
+  additionalCost: number;
   subtotal: number;
   vat: number;
   plateTotal: number;
