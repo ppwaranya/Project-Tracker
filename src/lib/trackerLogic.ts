@@ -458,19 +458,51 @@ export function depOpts(
   return o;
 }
 
-export function otherPer(
-  o: { amount: string | number; unit: string; times?: string | number },
-  q: number
-): number {
-  const a = Number(o.amount) || 0;
-  if (o.unit === 'ชิ้น') return a;
-  if (!q) return 0;
-  if (o.unit === 'เที่ยว') return (a * (Number(o.times) || 0)) / q;
-  if (o.unit === 'ล็อต') return a / q;
-  if (o.times && Number(o.times) > 0) {
-    return (a * Number(o.times)) / q;
+// ตรวจสอบว่าเป็นหน่วยต่อชิ้นหรือไม่
+export function isPerPieceUnit(unit: string): boolean {
+  const u = (unit || '').trim().toLowerCase();
+  return ['ชิ้น', 'piece', 'pc', 'pcs', 'ซอง', 'กล่อง', 'ขวด', 'กระปุก', 'หลอด', 'แคปซูล', 'เม็ด'].includes(u);
+}
+
+// คำนวณผลรวมของรายการค่าใช้จ่ายอื่นๆ (รวม VAT แล้ว)
+export function calcOtherItemTotal(
+  o: { amount: string | number; unit: string; perQty?: string | number; times?: string | number; vatIncluded?: boolean }
+): { value: number; isPerPiece: boolean; perQtyVal: number } {
+  const price = Number(o.amount) || 0;
+  const rawQty = o.perQty !== undefined && o.perQty !== '' ? Number(o.perQty) : Number(o.times);
+  const perQtyVal = rawQty > 0 ? rawQty : 1;
+  const vatMult = o.vatIncluded ? 1 : 1 + VAT_RATE;
+  const perPiece = isPerPieceUnit(o.unit);
+
+  if (perPiece) {
+    // กลุ่มต่อชิ้น: ราคา / ต่อจำนวน (เช่น 50 บาท ต่อ 10 ชิ้น = 5 บาท/ชิ้น)
+    return {
+      value: (price / perQtyVal) * vatMult,
+      isPerPiece: true,
+      perQtyVal,
+    };
+  } else {
+    // กลุ่มต่อครั้ง/รอบ: ราคา × จำนวนครั้ง/รอบ (เช่น 2,500 บาท × 2 เที่ยว = 5,000 บาท)
+    return {
+      value: price * perQtyVal * vatMult,
+      isPerPiece: false,
+      perQtyVal,
+    };
   }
-  return a / q;
+}
+
+export function otherPer(
+  o: { amount: string | number; unit: string; perQty?: string | number; times?: string | number },
+  _q: number
+): number {
+  const price = Number(o.amount) || 0;
+  const rawQty = o.perQty !== undefined && o.perQty !== '' ? Number(o.perQty) : Number(o.times);
+  const perQtyVal = rawQty > 0 ? rawQty : 1;
+
+  if (isPerPieceUnit(o.unit)) {
+    return price / perQtyVal;
+  }
+  return 0; // รายการต่อครั้ง/รอบ จะแยกไปคิดใน additionalCost ไม่นำไปหารต่อชิ้น
 }
 
 export function costOf(p: Project): CostSummaryResult {
@@ -481,8 +513,9 @@ export function costOf(p: Project): CostSummaryResult {
   const fr = lookup(f.steps, q);
   let packagingSubtotal = 0;
   let packagingVat = 0;
-  let otherSubtotal = 0;
-  let otherVat = 0;
+  let otherUnitSubtotal = 0;
+  let otherUnitVat = 0;
+  let additionalCost = 0;
   let plateTotal = 0;
   const below: string[] = [];
 
@@ -507,17 +540,30 @@ export function costOf(p: Project): CostSummaryResult {
   packagingSubtotal += platePerUnit;
 
   p.other.forEach((o) => {
-    const amount = otherPer(o, q);
-    otherSubtotal += amount;
-    if (!o.vatIncluded) otherVat += amount * VAT_RATE;
+    const price = Number(o.amount) || 0;
+    const rawQty = o.perQty !== undefined && o.perQty !== '' ? Number(o.perQty) : Number(o.times);
+    const perQtyVal = rawQty > 0 ? rawQty : 1;
+
+    if (isPerPieceUnit(o.unit)) {
+      // เฉลี่ยเป็นต่อชิ้น รวมเข้า Total Unit Cost
+      const unitBase = price / perQtyVal;
+      otherUnitSubtotal += unitBase;
+      if (!o.vatIncluded) otherUnitVat += unitBase * VAT_RATE;
+    } else {
+      // ต่อครั้ง/ต่อรอบ นำยอดทั้งก้อนไปรวมที่ Additional Cost
+      const lumpSum = price * perQtyVal * (o.vatIncluded ? 1 : 1 + VAT_RATE);
+      additionalCost += lumpSum;
+    }
   });
+
   const formulaVat = f.vatIncluded ? 0 : fr.price * VAT_RATE;
-  const subtotal = fr.price + packagingSubtotal + otherSubtotal;
-  const vat = formulaVat + packagingVat + otherVat;
+  const subtotal = fr.price + packagingSubtotal + otherUnitSubtotal;
+  const vat = formulaVat + packagingVat + otherUnitVat;
   const fp = fr.price + formulaVat;
   const pk = packagingSubtotal + packagingVat;
-  const ot = otherSubtotal + otherVat;
+  const ot = otherUnitSubtotal + otherUnitVat;
   const unit = subtotal + vat;
+
   return {
     q,
     f,
@@ -525,12 +571,13 @@ export function costOf(p: Project): CostSummaryResult {
     fhas: fr.has,
     pk,
     ot,
+    additionalCost,
     subtotal,
     vat,
     plateTotal,
     platePerUnit,
     unit,
-    batch: unit * q,
+    batch: unit * q + additionalCost,
     below,
   };
 }
@@ -612,12 +659,12 @@ export const DEFAULT_HOLIDAYS: Holiday[] = [
   { id: 'h4', date: '2027-01-01', name: 'วันขึ้นปีใหม่' },
 ];
 
-// ฟังก์ชันบีบอัดรูปภาพให้ขนาดกะทัดรัดก่อนบันทึกลง Google Sheets (ประกาศเพียงรอบเดียว)
+// ฟังก์ชันบีบอัดรูปภาพให้ขนาดกะทัดรัดก่อนอัปโหลดขึ้น Google Drive
 export const compressImageFile = (
   file: File,
-  maxWidth = 600,
-  maxHeight = 600,
-  quality = 0.65
+  maxWidth = 1000,
+  maxHeight = 1000,
+  quality = 0.8
 ): Promise<string> => {
   return new Promise((resolve, reject) => {
     if (!file) {

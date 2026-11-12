@@ -60,9 +60,10 @@ export interface PackagingItem {
 export interface OtherCostItem {
   id: string;
   name: string;
-  unit: string; // Custom allocation unit e.g. Per Piece, Per Trip, Per Lot, Per Kg, Per Box
-  amount: string | number;
-  times?: string | number;
+  unit: string; // หน่วยนับ เช่น ชิ้น, Piece, ครั้ง, รอบ, เที่ยว, ล็อต
+  amount: string | number; // ราคา (THB)
+  perQty?: string | number; // ต่อจำนวนเท่าไหร่ (เช่น 1, 100) หรือจำนวนครั้ง/รอบ
+  times?: string | number; // รองรับข้อมูลเก่า
   note: string;
   vatIncluded?: boolean;
 }
@@ -183,6 +184,7 @@ export interface CostSummaryResult {
   fhas: boolean;
   pk: number;
   ot: number;
+  additionalCost: number; // ยอดรวมค่าใช้จ่ายต่อครั้ง/ต่อรอบ (ไม่หารเฉลี่ยต่อชิ้น)
   subtotal: number;
   vat: number;
   plateTotal: number;

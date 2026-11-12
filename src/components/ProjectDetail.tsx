@@ -8,6 +8,7 @@ import {
 } from '../lib/types';
 import {
   baht,
+  calcOtherItemTotal,
   compute,
   costOf,
   displayCategory,
@@ -15,7 +16,6 @@ import {
   flatTasks,
   fmt,
   lookup,
-  otherPer,
   PACKAGING_STATUS_LIST,
   PKG_TYPES,
   REGULATORY_STATUS_LIST,
@@ -3156,12 +3156,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   Operating, Logistics & Incidental Expenses
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Customizable allocation unit (e.g. per piece, per trip, per lot, per kg, per carton)
+                  หน่วย "ชิ้น" จะถูกหารเฉลี่ยรวมใน Total Unit Cost ส่วนหน่วย "ครั้ง / รอบ / เที่ยว / ล็อต" จะแยกแสดงที่ Additional Cost
                 </p>
               </div>
 
               <div className="ml-auto flex shrink-0 items-center gap-2">
                 <button
+                  type="button"
                   onClick={() =>
                     update({
                       other: [
@@ -3169,9 +3170,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         {
                           id: uid(),
                           name: '',
-                          unit: 'Piece',
+                          unit: 'ชิ้น',
                           amount: '',
-                          times: '',
+                          perQty: 1,
                           note: '',
                           vatIncluded: false,
                         },
@@ -3191,15 +3192,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               className="overflow-x-auto rounded-2xl border border-slate-200"
               hidden={collapsedPanels.has('cost-other')}
             >
-              <table className="w-full text-xs text-left min-w-[760px]">
+              <table className="w-full text-xs text-left min-w-[820px]">
                 <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
                   <tr>
-                    <th className="py-2.5 px-3.5">Expense Description</th>
-                    <th className="py-2.5 px-3">Allocation Unit</th>
-                    <th className="py-2.5 px-3">Amount (THB)</th>
-                    <th className="py-2.5 px-3">Frequency / Trips</th>
-                    <th className="py-2.5 px-3 text-right">Cost Per Unit (THB)</th>
-                    <th className="py-2.5 px-3">Notes</th>
+                    <th className="py-2.5 px-3.5 min-w-[180px]">รายละเอียด (Description)</th>
+                    <th className="py-2.5 px-3 w-40">ราคา (THB)</th>
+                    <th className="py-2.5 px-3 w-28 text-center">ต่อจำนวน</th>
+                    <th className="py-2.5 px-3 w-32">หน่วยนับ</th>
+                    <th className="py-2.5 px-3 w-36 text-right">ผลรวม (รวม VAT)</th>
+                    <th className="py-2.5 px-3 min-w-[150px]">Notes</th>
                     <th className="py-2.5 px-2 w-10 text-center"></th>
                   </tr>
                 </thead>
@@ -3212,40 +3213,30 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     </tr>
                   ) : (
                     project.other.map((o, idx) => {
-                      const baseCostPerUnit = otherPer(o, Number(project.qty) || 0);
-                      const costPerUnit =
-                        baseCostPerUnit * (o.vatIncluded ? 1 : 1 + VAT_RATE);
+                      const calc = calcOtherItemTotal(o);
+                      const displayQty =
+                        o.perQty !== undefined && o.perQty !== ''
+                          ? o.perQty
+                          : o.times || 1;
+
                       return (
-                        <tr key={o.id} className="hover:bg-slate-50/70">
+                        <tr key={o.id} className="hover:bg-slate-50/70 align-top">
+                          {/* 1. ดีเทลว่าคืออะไร */}
                           <td className="p-2 pl-3.5">
                             <input
                               type="text"
                               value={o.name}
                               onChange={(e) => {
                                 const copy = [...project.other];
-                                copy[idx].name = e.target.value;
+                                copy[idx] = { ...copy[idx], name: e.target.value };
                                 update({ other: copy });
                               }}
-                              placeholder=""
+                              placeholder="เช่น ค่าแพ็คกิ้ง / ค่าขนส่ง"
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
                             />
                           </td>
 
-                          <td className="p-2">
-                            <input
-                              type="text"
-                              list="unit-suggestions"
-                              value={o.unit}
-                              onChange={(e) => {
-                                const copy = [...project.other];
-                                copy[idx].unit = e.target.value;
-                                update({ other: copy });
-                              }}
-                              placeholder=""
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-800"
-                            />
-                          </td>
-
+                          {/* 2. ราคาเท่าไหร่ + VAT */}
                           <td className="p-2">
                             {costPrivacy ? (
                               <input
@@ -3262,10 +3253,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 value={o.amount}
                                 onChange={(e) => {
                                   const copy = [...project.other];
-                                  copy[idx].amount = e.target.value;
+                                  copy[idx] = { ...copy[idx], amount: e.target.value };
                                   update({ other: copy });
                                 }}
-                                placeholder=""
+                                placeholder="0.00"
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
                               />
                             )}
@@ -3287,59 +3278,98 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             </select>
                           </td>
 
+                          {/* 3. ต่อจำนวนเท่าไหร่ */}
                           <td className="p-2">
-                            {o.unit === 'เที่ยว' || o.unit === 'Trip' || o.unit === 'ครั้ง' || o.unit === 'Box' ? (
-                              <input
-                                type="number"
-                                min="1"
-                                value={o.times || 1}
-                                onChange={(e) => {
-                                  const copy = [...project.other];
-                                  copy[idx].times = e.target.value;
-                                  update({ other: copy });
-                                }}
-                                placeholder=""
-                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-center"
-                              />
-                            ) : (
-                              <span className="text-slate-400 pl-3">-</span>
-                            )}
+                            <input
+                              type="number"
+                              min="1"
+                              step="any"
+                              value={displayQty}
+                              onChange={(e) => {
+                                const copy = [...project.other];
+                                copy[idx] = {
+                                  ...copy[idx],
+                                  perQty: e.target.value,
+                                  times: e.target.value,
+                                };
+                                update({ other: copy });
+                              }}
+                              placeholder="1"
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-center font-semibold"
+                            />
+                            <span className="block text-[10px] text-slate-400 text-center mt-1">
+                              {calc.isPerPiece ? 'ต่อกี่ชิ้น' : 'กี่ครั้ง/รอบ'}
+                            </span>
                           </td>
 
-                          <td className="p-2 text-right tabular-nums font-bold">
+                          {/* 4. หน่วยนับ */}
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              list="unit-suggestions"
+                              value={o.unit}
+                              onChange={(e) => {
+                                const copy = [...project.other];
+                                copy[idx] = { ...copy[idx], unit: e.target.value };
+                                update({ other: copy });
+                              }}
+                              placeholder="ชิ้น / ครั้ง"
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-800"
+                            />
+                            <span
+                              className={`block text-[10px] mt-1 font-semibold ${
+                                calc.isPerPiece ? 'text-emerald-600' : 'text-indigo-600'
+                              }`}
+                            >
+                              {calc.isPerPiece ? '→ รวมใน Unit Cost' : '→ Additional Cost'}
+                            </span>
+                          </td>
+
+                          {/* 5. ผลรวม */}
+                          <td className="p-2 text-right tabular-nums">
                             {costPrivacy ? (
-                              <span className="text-slate-400 font-mono">
-                                ••••••
-                              </span>
+                              <span className="text-slate-400 font-mono">••••••</span>
                             ) : (
-                              <span className="text-slate-800">
-                                {baht(costPerUnit)} ฿
-                              </span>
+                              <div>
+                                <span
+                                  className={`font-extrabold text-xs sm:text-sm ${
+                                    calc.isPerPiece ? 'text-emerald-700' : 'text-indigo-700'
+                                  }`}
+                                >
+                                  {baht(calc.value)} ฿
+                                </span>
+                                <span className="block text-[10px] text-slate-400">
+                                  {calc.isPerPiece ? 'ต่อชิ้น (เฉลี่ย)' : 'ยอดรวมทั้งก้อน'}
+                                </span>
+                              </div>
                             )}
                           </td>
 
+                          {/* 6. Notes */}
                           <td className="p-2">
                             <input
                               type="text"
                               value={o.note}
                               onChange={(e) => {
                                 const copy = [...project.other];
-                                copy[idx].note = e.target.value;
+                                copy[idx] = { ...copy[idx], note: e.target.value };
+                                update({ other: copy });
                               }}
-                              placeholder=""
+                              placeholder="หมายเหตุ"
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
                             />
                           </td>
 
-                          <td className="p-2 text-center">
+                          <td className="p-2 text-center pt-3">
                             <button
+                              type="button"
                               onClick={() => {
                                 const copy = project.other.filter(
                                   (x) => x.id !== o.id
                                 );
                                 update({ other: copy });
                               }}
-                              className="text-slate-400 hover:text-rose-600 p-1"
+                              className="text-slate-400 hover:text-rose-600 p-1 text-base leading-none"
                               title="Delete"
                             >
                               ×
@@ -3354,15 +3384,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
 
             <datalist id="unit-suggestions">
-              <option value="Piece" />
-              <option value="Trip" />
-              <option value="Lot" />
-              <option value="Kg" />
-              <option value="Carton" />
-              <option value="Time" />
               <option value="ชิ้น" />
+              <option value="Piece" />
+              <option value="ครั้ง" />
+              <option value="รอบ" />
               <option value="เที่ยว" />
               <option value="ล็อต" />
+              <option value="Trip" />
+              <option value="Lot" />
             </datalist>
           </section>
           </fieldset>
@@ -3890,6 +3919,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             onChange={(e) => {
                               const copy = [...project.docs];
                               copy[idx].note = e.target.value;
+                              update({ docs: copy });
                             }}
                             placeholder=""
                             className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"

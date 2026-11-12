@@ -1,6 +1,6 @@
 import React from 'react';
 import { CostSummaryResult, Project } from '../lib/types';
-import { baht } from '../lib/trackerLogic';
+import { baht, isPerPieceUnit } from '../lib/trackerLogic';
 import { AlertTriangle, EyeOff, ShieldAlert } from 'lucide-react';
 
 interface CostSummaryProps {
@@ -14,7 +14,7 @@ export const CostSummary: React.FC<CostSummaryProps> = ({
   costSummary,
   costPrivacy,
 }) => {
-  const { q, f, fp, fhas, pk, ot, subtotal, vat, plateTotal, platePerUnit, unit, batch, below } = costSummary;
+  const { q, f, fp, fhas, pk, ot, additionalCost, subtotal, vat, plateTotal, platePerUnit, unit, batch, below } = costSummary;
   const total = unit || 0;
 
   const pct = (v: number) => (total > 0 ? Math.max(0, (v / total) * 100) : 0);
@@ -43,6 +43,8 @@ export const CostSummary: React.FC<CostSummaryProps> = ({
   }
 
   const selectedPkgCount = project.packaging.filter((it) => it.selectedForCost !== false).length;
+  const perPieceOtherCount = project.other.filter((o) => isPerPieceUnit(o.unit)).length;
+  const lumpSumOtherCount = project.other.length - perPieceOtherCount;
 
   return (
     <div className="space-y-4">
@@ -51,7 +53,7 @@ export const CostSummary: React.FC<CostSummaryProps> = ({
         <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
           <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-600 mt-0.5" />
           <span>
-            ยังไม่ได้ระบุจำนวนสั่งผลิตในส่วนภาพรวมโครงการ การคำนวณขั้นราคาจึงใช้ขั้นต่ำสุด และค่าบล็อก/ค่าขนส่งยังไม่สามารถเฉลี่ยเป็นต่อหน่วยได้
+            ยังไม่ได้ระบุจำนวนสั่งผลิตในส่วนภาพรวมโครงการ การคำนวณขั้นราคาจึงใช้ขั้นต่ำสุด และค่าบล็อกยังไม่สามารถเฉลี่ยเป็นต่อหน่วยได้
           </span>
         </div>
       )}
@@ -93,8 +95,8 @@ export const CostSummary: React.FC<CostSummaryProps> = ({
 
             <tr className="hover:bg-slate-50/60 transition-colors">
               <td className="py-3 px-4 text-slate-700 font-medium">
-                Operating & Other Costs{' '}
-                <span className="text-xs text-slate-400">({project.other.length} items)</span>
+                Operating & Other Costs (ต่อชิ้น){' '}
+                <span className="text-xs text-slate-400">({perPieceOtherCount} items)</span>
               </td>
               <td className="py-3 px-4 text-right font-bold text-slate-900 tabular-nums">
                 {baht(ot)} THB / pc
@@ -109,7 +111,7 @@ export const CostSummary: React.FC<CostSummaryProps> = ({
             </tr>
 
             <tr className="bg-amber-50/70 font-medium text-amber-900">
-              <td className="py-3 px-4">VAT 7% (เฉพาะรายการที่ยังไม่รวม VAT)</td>
+              <td className="py-3 px-4">VAT 7% (เฉพาะรายการต่อชิ้นที่ยังไม่รวม VAT)</td>
               <td className="py-3 px-4 text-right tabular-nums font-bold">
                 {baht(vat)} THB / pc
               </td>
@@ -119,20 +121,33 @@ export const CostSummary: React.FC<CostSummaryProps> = ({
             <tr className="bg-emerald-50/80 border-t-2 border-emerald-500 font-bold text-slate-900">
               <td className="py-3.5 px-4 text-emerald-950 font-bold text-sm">Total Unit Cost (รวม VAT)</td>
               <td className="py-3.5 px-4 text-right text-base font-extrabold text-emerald-700 tabular-nums font-heading">
-                {baht(unit)} THB
+                {baht(unit)} THB / pc
+              </td>
+            </tr>
+
+            {/* Additional Cost (ต่อครั้ง / ต่อรอบ) */}
+            <tr className="bg-indigo-50/70 border-t border-indigo-200 font-bold text-indigo-950">
+              <td className="py-3 px-4">
+                Additional Cost (ค่าใช้จ่ายต่อครั้ง / ต่อรอบ){' '}
+                <span className="text-xs font-normal text-indigo-700">
+                  ({lumpSumOtherCount} items · รวม VAT แล้ว ไม่หารต่อชิ้น)
+                </span>
+              </td>
+              <td className="py-3 px-4 text-right text-sm sm:text-base font-extrabold text-indigo-700 tabular-nums font-heading">
+                {baht(additionalCost)} THB
               </td>
             </tr>
 
             {/* Total Batch Cost */}
-            <tr className="bg-slate-50/90 font-medium text-slate-800">
+            <tr className="bg-slate-50/90 font-medium text-slate-800 border-t border-slate-200">
               <td className="py-3 px-4">
-                Total Batch Cost (รวม VAT){' '}
+                Total Batch Cost (รวม VAT + Additional Cost){' '}
                 <span className="text-xs text-slate-500">
                   ({q ? `${Number(q).toLocaleString('en-US')} pcs` : 'Quantity not set'})
                 </span>
               </td>
               <td className="py-3 px-4 text-right tabular-nums font-bold text-slate-900">
-                {q ? `${baht(batch)} THB` : '-'}
+                {q || additionalCost > 0 ? `${baht(batch)} THB` : '-'}
               </td>
             </tr>
           </tbody>
@@ -143,7 +158,7 @@ export const CostSummary: React.FC<CostSummaryProps> = ({
       {total > 0 && (
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
           <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-            <span>สัดส่วนโครงสร้างต้นทุน (Cost Distribution)</span>
+            <span>สัดส่วนโครงสร้างต้นทุนต่อชิ้น (Unit Cost Distribution)</span>
             <span className="text-teal-700">100% สัดส่วนรวม</span>
           </div>
 
@@ -161,7 +176,7 @@ export const CostSummary: React.FC<CostSummaryProps> = ({
             <div
               style={{ width: `${pct(ot)}%`, backgroundColor: '#f59e0b' }}
               className="transition-all"
-              title={`ต้นทุนอื่น: ${baht(ot)} บาท (${pct(ot).toFixed(1)}%)`}
+              title={`ต้นทุนอื่นต่อชิ้น: ${baht(ot)} บาท (${pct(ot).toFixed(1)}%)`}
             />
           </div>
 
@@ -177,7 +192,7 @@ export const CostSummary: React.FC<CostSummaryProps> = ({
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#f59e0b' }} />
-              <span>ต้นทุนอื่น: <strong>{pct(ot).toFixed(1)}%</strong> ({baht(ot)} บ.)</span>
+              <span>ต้นทุนอื่นต่อชิ้น: <strong>{pct(ot).toFixed(1)}%</strong> ({baht(ot)} บ.)</span>
             </div>
           </div>
         </div>
