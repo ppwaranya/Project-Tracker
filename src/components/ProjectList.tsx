@@ -15,17 +15,16 @@ import {
   Search,
   Plus,
   ArrowRight,
-  TrendingUp,
   Package,
   Clock,
   CheckCircle2,
   EyeOff,
-  Sparkles,
   LayoutGrid,
   Table as TableIcon,
   ChevronRight,
   X,
   Layers,
+  Wallet,
 } from 'lucide-react';
 
 interface ProjectListProps {
@@ -89,6 +88,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
   const inProgressCount = projects.filter((p) => displayStatus(p.status) === 'In Progress').length;
   const completedCount = projects.filter((p) => displayStatus(p.status) === 'Completed').length;
   const totalVolume = projects.reduce((acc, p) => acc + (Number(p.qty) || 0), 0);
+  const totalAllProjectsCost = projects.reduce((acc, p) => acc + (costOf(p).batch || 0), 0);
 
   const phaseColors: Record<number, string> = {
     1: '#0d9488',
@@ -101,7 +101,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Sleek, Modern Stat Bar (Giant yellow box removed as requested!) */}
+      {/* Sleek, Modern Stat Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
         <div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight font-heading">
@@ -120,8 +120,8 @@ export const ProjectList: React.FC<ProjectListProps> = ({
         )}
       </div>
 
-      {/* 4 Niond-Style Pastel & Slate Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {/* 5 Metric Cards (รวมยอด Sum ต้นทุนทุกโปรเจกต์) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {/* Card 1: Lavender / Soft Lilac */}
         <div className="bg-[#eee8ff] p-5 rounded-2xl sm:rounded-3xl border border-[#ded5fc] shadow-2xs transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
@@ -170,7 +170,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
           </div>
         </div>
 
-        {/* Card 4: Sleek Dark Slate / Teal with Lime Pill (Niond Signature) */}
+        {/* Card 4: Sleek Dark Slate / Teal with Lime Pill */}
         <div className="bg-slate-900 p-5 rounded-2xl sm:rounded-3xl border border-slate-800 shadow-2xs text-white transition-all flex flex-col justify-between relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
@@ -185,6 +185,33 @@ export const ProjectList: React.FC<ProjectListProps> = ({
               {totalVolume > 0 ? totalVolume.toLocaleString('en-US') : '-'}
             </p>
             <span className="text-[11px] text-slate-400 font-medium mt-0.5 block">Total order units planned</span>
+          </div>
+        </div>
+
+        {/* Card 5: Total Cost Sum Across All Projects */}
+        <div className="col-span-2 md:col-span-1 bg-[#fef3c7] p-5 rounded-2xl sm:rounded-3xl border border-[#fde68a] shadow-2xs transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#78350f]">
+              Total Project Cost
+            </span>
+            <div className="w-7 h-7 rounded-full bg-[#fde68a] text-[#92400e] flex items-center justify-center">
+              <Wallet className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div>
+            {costPrivacy ? (
+              <div className="inline-flex items-center gap-1.5 text-amber-900/70 bg-amber-200/60 px-2.5 py-1 rounded-xl text-xs font-bold font-mono my-1">
+                <EyeOff className="w-3.5 h-3.5" />
+                <span>••••••</span>
+              </div>
+            ) : (
+              <p className="text-xl sm:text-2xl font-black text-[#451a03] truncate">
+                {totalAllProjectsCost > 0 ? `${baht(totalAllProjectsCost)} ฿` : '-'}
+              </p>
+            )}
+            <span className="text-[11px] text-[#92400e] font-semibold mt-0.5 block">
+              Sum of all projects (incl. VAT)
+            </span>
           </div>
         </div>
       </div>
@@ -355,7 +382,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
 
                   {/* PROGRESS SECTION: OVERALL BAR & MAIN PHASE MILESTONES */}
                   <div className="my-3 p-3.5 rounded-2xl bg-white/95 border border-slate-200/90 shadow-2xs space-y-3">
-                    {/* Overall Project Progress Header & Bar (Main & Prominent) */}
+                    {/* Overall Project Progress Header & Bar */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
@@ -401,7 +428,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                       </div>
                     </div>
 
-                    {/* Phase Milestones: Main Headers Progress & % (Compact Mini Bars) */}
+                    {/* Phase Milestones */}
                     <div className="pt-2.5 border-t border-slate-100 space-y-2">
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="font-extrabold uppercase tracking-wider text-slate-500">
@@ -463,7 +490,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                                 </span>
                               </div>
 
-                              {/* Compact Mini Bar (Subordinate to overall bar) */}
+                              {/* Compact Mini Bar */}
                               <div className="w-full h-1.5 bg-slate-200/70 rounded-full overflow-hidden">
                                 <div
                                   className="h-full rounded-full transition-all duration-300"
@@ -480,8 +507,8 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                     </div>
                   </div>
 
-                  {/* Card Footer: Units, Est. Delivery, Cost Per Unit, View Button */}
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3 text-xs">
+                  {/* Card Footer: Units, Est. Delivery, Cost / Unit, Total Cost, View Button */}
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs flex-wrap sm:flex-nowrap">
                     <div className="space-y-0.5">
                       <span className="text-slate-400 block text-[11px]">
                         Order Quantity
@@ -529,6 +556,22 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                       )}
                     </div>
 
+                    <div className="space-y-0.5 text-right">
+                      <span className="text-slate-400 block text-[11px]">
+                        Total Cost
+                      </span>
+                      {costPrivacy ? (
+                        <span className="inline-flex items-center gap-1 font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md text-xs">
+                          <EyeOff className="w-3 h-3" />
+                          <span>••••••</span>
+                        </span>
+                      ) : (
+                        <strong className="text-teal-800 text-sm font-black">
+                          {co.batch > 0 ? `${baht(co.batch)} ฿` : '-'}
+                        </strong>
+                      )}
+                    </div>
+
                     <button
                       onClick={() => onSelectProject(p.id)}
                       className="p-2 rounded-xl bg-slate-100 group-hover:bg-[#ccf835] text-slate-700 group-hover:text-slate-950 transition-colors cursor-pointer flex-shrink-0"
@@ -548,7 +591,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
       {viewMode === 'table' && (
         <div className="bg-white rounded-3xl border border-slate-200 shadow-2xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs sm:text-sm border-collapse min-w-[960px]">
+            <table className="w-full text-left text-xs sm:text-sm border-collapse min-w-[1060px]">
               <thead>
                 <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
                   <th className="py-3.5 px-4">Project Name</th>
@@ -559,6 +602,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                   <th className="py-3.5 px-4">Progress</th>
                   <th className="py-3.5 px-4">Est. Delivery</th>
                   <th className="py-3.5 px-4 text-right">Cost / Unit</th>
+                  <th className="py-3.5 px-4 text-right">Total Cost</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-2 text-right"></th>
                 </tr>
@@ -728,6 +772,18 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                           </span>
                         ) : co.unit > 0 ? (
                           <span className="text-slate-900">{baht(co.unit)} ฿</span>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </td>
+
+                      <td className="py-3.5 px-4 text-right tabular-nums font-black">
+                        {costPrivacy ? (
+                          <span className="text-slate-400 font-mono text-xs">
+                            ••••••
+                          </span>
+                        ) : co.batch > 0 ? (
+                          <span className="text-teal-800">{baht(co.batch)} ฿</span>
                         ) : (
                           <span className="text-slate-400">-</span>
                         )}
