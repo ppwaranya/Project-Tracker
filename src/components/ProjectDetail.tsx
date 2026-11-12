@@ -663,7 +663,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       </div>
 
       {/* KPI Summary Banner */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+{/* KPI Summary Banner */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         <div className="bg-[#eee8ff] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#ded5fc] shadow-2xs flex flex-col justify-between">
           <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#4d3b94] block mb-1">
             Current Stage
@@ -735,8 +736,32 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     ? `${co.fullPacks.toLocaleString()} ${packMetrics.packUnitName}${
                         co.remainderUnits > 0 ? ` + เศษ ${co.remainderUnits} ${packMetrics.baseUnitName}` : ''
                       }`
-                    : `Lot: ${baht(co.batch)} ฿ (${Number(co.q).toLocaleString('en-US')} ${packMetrics.baseUnitName})`
+                    : `${Number(co.q).toLocaleString('en-US')} ${packMetrics.baseUnitName}`
                   : 'Enter quantity in Overview'}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* การ์ดใบที่ 5: Total Cost รวมทั้งหมดของโปรเจกต์ */}
+        <div className="col-span-2 md:col-span-1 bg-[#fef3c7] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#fde68a] shadow-2xs flex flex-col justify-between">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#78350f] block mb-1">
+            Total Cost
+          </span>
+          {costPrivacy ? (
+            <div className="flex items-center gap-1.5 text-amber-900/70 bg-amber-200/60 px-2.5 py-1 rounded-xl text-xs font-bold font-mono my-0.5">
+              <EyeOff className="w-3.5 h-3.5" />
+              <span>••••••</span>
+            </div>
+          ) : (
+            <div>
+              <b className="text-lg sm:text-xl font-black text-[#451a03] block truncate">
+                {co.batch > 0 ? `${baht(co.batch)} ฿` : '-'}
+              </b>
+              <span className="text-[11px] text-[#92400e] mt-1 block truncate font-semibold">
+                {co.q
+                  ? `Total batch (${Number(co.q).toLocaleString('en-US')} ${packMetrics.baseUnitName})`
+                  : 'Incl. VAT & expenses'}
               </span>
             </div>
           )}
