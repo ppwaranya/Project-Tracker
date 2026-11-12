@@ -445,26 +445,75 @@ export function compute(
 ): Record<string, TaskComputeResult> {
   const fl = flatTasks(p);
   const res: Record<string, TaskComputeResult> = {};
-  fl.forEach((t, i) => {
-    let s: string;
-    if (t.dep === '@start') {
-      s = p.startDate;
-    } else if (t.dep === '@all') {
-      let m: string | null = null;
-      for (let j = 0; j < i; j++) {
-        const e = res[fl[j].id].e;
-        if (!m || e > m) m = e;
+  const taskIds = new Set(fl.map((t) => t.id));
+
+  // คำนวณแบบวนรอบตาม Dependency Graph เพื่อรองรับการอ้างอิงข้าม Phase (เช่น Phase 2 รอ Phase 5)
+  let remaining = fl.map((t, idx) => ({ t, idx }));
+  let pass = 0;
+  const maxPasses = fl.length + 2;
+
+  while (remaining.length > 0 && pass < maxPasses) {
+    pass++;
+    const nextRemaining: { t: Task; idx: number }[] = [];
+    let resolvedAny = false;
+
+    for (const item of remaining) {
+      const { t, idx } = item;
+      let s: string | null = null;
+
+      if (t.dep === '@start') {
+        s = p.startDate;
+      } else if (t.dep === '@all') {
+        let ready = true;
+        let m: string | null = null;
+        for (let j = 0; j < idx; j++) {
+          const prevRes = res[fl[j].id];
+          if (!prevRes) {
+            ready = false;
+            break;
+          }
+          if (!m || prevRes.e > m) m = prevRes.e;
+        }
+        if (ready) {
+          s = m ? addD(m, 1) : p.startDate;
+        }
+      } else if (t.dep && taskIds.has(t.dep)) {
+        if (res[t.dep]) {
+          s = addD(res[t.dep].e, 1);
+        }
+      } else {
+        s = t.start || p.startDate;
       }
-      s = m ? addD(m, 1) : p.startDate;
-    } else if (t.dep && res[t.dep]) {
-      s = addD(res[t.dep].e, 1);
-    } else {
-      s = t.start || p.startDate;
+
+      if (s !== null) {
+        const raw = s;
+        const startWork = nextWork(s, holidaysSet);
+        res[t.id] = {
+          s: startWork,
+          e: addWork(startWork, t.days, holidaysSet),
+          raw,
+        };
+        resolvedAny = true;
+      } else {
+        nextRemaining.push(item);
+      }
     }
-    const raw = s;
-    s = nextWork(s, holidaysSet);
-    res[t.id] = { s: s, e: addWork(s, t.days, holidaysSet), raw: raw };
-  });
+
+    remaining = nextRemaining;
+
+    // กรณีเกิดการอ้างอิงวนเป็นวงกลม (Circular Dependency) ให้ปลดล็อกตัวแรกด้วย startDate
+    if (!resolvedAny && remaining.length > 0) {
+      const fallback = remaining.shift()!;
+      const raw = fallback.t.start || p.startDate;
+      const startWork = nextWork(raw, holidaysSet);
+      res[fallback.t.id] = {
+        s: startWork,
+        e: addWork(startWork, fallback.t.days, holidaysSet),
+        raw,
+      };
+    }
+  }
+
   return res;
 }
 
@@ -703,7 +752,6 @@ export function costOf(p: Project): CostSummaryResult {
     }
 
     if (basis === 'pack') {
-      // บรรจุภัณฑ์ระดับแพ็ก (เช่น ถุงซิปล็อกนอก / กล่อง / กระปุก)
       const pkgBasePerUnit = ratio > 0 ? r.price / ratio : r.price;
       const plateBasePerUnit = fullPacks > 0 ? rawPlate / (fullPacks * ratio) : 0;
       packagingSubtotalPerUnit += pkgBasePerUnit;
@@ -714,7 +762,6 @@ export function costOf(p: Project): CostSummaryResult {
         below.push(`${it.name || '(ไม่มีชื่อ)'} (ใช้ ${fullPacks.toLocaleString()} ${metrics.packUnitName} < MOQ ${Number(it.moq).toLocaleString()})`);
       }
     } else {
-      // บรรจุภัณฑ์ระดับหน่วยย่อย (เช่น ซองย่อย / เม็ด / แคปซูล)
       const plateBasePerUnit = q > 0 ? rawPlate / q : 0;
       packagingSubtotalPerUnit += r.price;
       if (!it.vatIncluded) {
@@ -726,7 +773,6 @@ export function costOf(p: Project): CostSummaryResult {
     }
   });
 
-  // เฉลี่ยค่าบล็อก/แม่พิมพ์รวมเข้าต่อหน่วยย่อย
   const platePerUnit = q > 0 ? plateTotal / q : 0;
   packagingSubtotalPerUnit += platePerUnit;
 
@@ -757,10 +803,10 @@ export function costOf(p: Project): CostSummaryResult {
   const pk = packagingSubtotalPerUnit + packagingVatPerUnit;
   const ot = otherUnitSubtotal + otherUnitVat;
 
-  const unit = subtotal + vat; // ต้นทุนต่อ 1 หน่วยย่อย (ซอง/เม็ด) รวม VAT
-  const packCost = unit * ratio; // ต้นทุนต่อ 1 แพ็กขายจริง (ห่อ/กระปุก) รวม VAT
-  const sellableBatchCost = packCost * fullPacks; // ต้นทุนรวมของแพ็กขายเต็มทั้งหมด
-  const remainderCost = unit * remainderUnits; // มูลค่าของเศษคงเหลือ
+  const unit = subtotal + vat;
+  const packCost = unit * ratio;
+  const sellableBatchCost = packCost * fullPacks;
+  const remainderCost = unit * remainderUnits;
   const batch = unit * q + additionalCost;
 
   return {

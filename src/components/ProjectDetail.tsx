@@ -108,6 +108,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   } | null>(null);
   const [armDelete, setArmDelete] = useState(false);
   const [copiedViewLink, setCopiedViewLink] = useState(false);
+  const [draggedTask, setDraggedTask] = useState<{ phaseK: number; taskId: string } | null>(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
 
   // Link document addition state
   const [linkUrl, setLinkUrl] = useState('');
@@ -3874,34 +3876,98 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           </td>
                         </tr>
 
-                        {ph.tasks.map((t) => {
+                        {ph.tasks.map((t, tIdx) => {
                           const r = cs[t.id];
                           const earlier = earlierTasks.filter(
                             (x) => x.id !== t.id
                           );
+                          const isEditingSchedule = canEdit('timeline-schedule');
+                          const isDraggingThis = draggedTask?.taskId === t.id;
+                          const isDragOverThis = dragOverTaskId === t.id && !isDraggingThis;
 
                           return (
                             <tr
                               key={t.id}
-                              className="hover:bg-slate-50/70 transition-colors"
+                              draggable={isEditingSchedule}
+                              onDragStart={(e) => {
+                                if (!isEditingSchedule) return;
+                                setDraggedTask({ phaseK: ph.k, taskId: t.id });
+                                e.dataTransfer.effectAllowed = 'move';
+                              }}
+                              onDragOver={(e) => {
+                                if (!isEditingSchedule || !draggedTask || draggedTask.phaseK !== ph.k) return;
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = 'move';
+                                if (dragOverTaskId !== t.id) {
+                                  setDragOverTaskId(t.id);
+                                }
+                              }}
+                              onDragLeave={() => {
+                                if (dragOverTaskId === t.id) {
+                                  setDragOverTaskId(null);
+                                }
+                              }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                if (!isEditingSchedule || !draggedTask || draggedTask.phaseK !== ph.k || draggedTask.taskId === t.id) {
+                                  setDraggedTask(null);
+                                  setDragOverTaskId(null);
+                                  return;
+                                }
+                                const newPhases = project.phases.map((x) => {
+                                  if (x.k !== ph.k) return x;
+                                  const list = [...x.tasks];
+                                  const fromIdx = list.findIndex((item) => item.id === draggedTask.taskId);
+                                  const toIdx = list.findIndex((item) => item.id === t.id);
+                                  if (fromIdx === -1 || toIdx === -1) return x;
+                                  const [moved] = list.splice(fromIdx, 1);
+                                  list.splice(toIdx, 0, moved);
+                                  return { ...x, tasks: list };
+                                });
+                                update({ phases: newPhases });
+                                setDraggedTask(null);
+                                setDragOverTaskId(null);
+                              }}
+                              onDragEnd={() => {
+                                setDraggedTask(null);
+                                setDragOverTaskId(null);
+                              }}
+                              className={`transition-colors ${
+                                isDraggingThis
+                                  ? 'opacity-40 bg-teal-50/70'
+                                  : isDragOverThis
+                                  ? 'border-t-2 border-t-teal-500 bg-teal-50/30'
+                                  : 'hover:bg-slate-50/70'
+                              }`}
                             >
-                              <td className="p-2 pl-3.5">
-                                <input
-                                  type="text"
-                                  value={t.name}
-                                  onChange={(e) => {
-                                    const newPhases = project.phases.map((x) => ({
-                                      ...x,
-                                      tasks: x.tasks.map((task) =>
-                                        task.id === t.id
-                                          ? { ...task, name: e.target.value }
-                                          : task
-                                      ),
-                                    }));
-                                    update({ phases: newPhases });
-                                  }}
-                                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
-                                />
+                              <td className="p-2 pl-3">
+                                <div className="flex items-center gap-2">
+                                  {isEditingSchedule && (
+                                    <span
+                                      title="ลากขึ้น-ลงเพื่อจัดลำดับ"
+                                      className="flex flex-col justify-center gap-[3px] px-1.5 py-2 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 cursor-grab active:cursor-grabbing shrink-0 select-none"
+                                    >
+                                      <span className="block w-3.5 h-[1.5px] bg-current rounded-full" />
+                                      <span className="block w-3.5 h-[1.5px] bg-current rounded-full" />
+                                    </span>
+                                  )}
+                                  <input
+                                    type="text"
+                                    value={t.name}
+                                    onChange={(e) => {
+                                      const newPhases = project.phases.map((x) => ({
+                                        ...x,
+                                        tasks: x.tasks.map((task) =>
+                                          task.id === t.id
+                                            ? { ...task, name: e.target.value }
+                                            : task
+                                        ),
+                                      }));
+                                      update({ phases: newPhases });
+                                    }}
+                                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
+                                  />
+                                </div>
                               </td>
 
                               <td className="p-2">
