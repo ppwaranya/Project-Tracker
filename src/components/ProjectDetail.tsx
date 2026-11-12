@@ -1026,9 +1026,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 <Award className="w-4 h-4 text-amber-500" />
                 <span>Product Reference & Benchmark</span>
               </h3>
-              <span className="text-[11px] text-slate-400 font-medium">
-                Benchmark sensory, texture, taste, packaging & pricing against market competitors
-              </span>
+            
               <div className="ml-auto flex shrink-0 items-center gap-2">
                 {panelActions('overview-benchmark')}
               </div>
@@ -1831,16 +1829,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <h3 className="text-base font-bold text-slate-900 font-heading">
                 Formulation Development & Iterations
               </h3>
-              <p className="text-xs text-slate-500">
-                {project.formulas.length} iterations tracked · Active costing formula:{' '}
-                <strong>
-                  {
-                    project.formulas.find((f) => f.id === project.chosenFormula)
-                      ?.ver
-                  }
-                </strong>{' '}
-                · ราคาต่อหน่วยย่อย ({packMetrics.baseUnitName})
-              </p>
             </div>
 
             <div className="ml-auto flex items-center gap-2">

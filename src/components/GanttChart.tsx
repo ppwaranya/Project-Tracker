@@ -163,7 +163,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             Weekly Timeline & Milestones
           </span>
           <span className="text-[11px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md font-medium">
-            {n} สัปดาห์ · เลื่อนซ้าย-ขวา หรือกด +/- เพื่อย่อขยาย
+            {n} สัปดาห์
           </span>
         </div>
 
