@@ -3440,7 +3440,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <h3 className="text-base font-bold text-slate-900 font-heading">
-                  Operating, Logistics & Incidental Expenses
+                  Additional Cost
                 </h3>
                 <p className="text-xs text-slate-500">
                   หน่วย "{packMetrics.baseUnitName}" และ "{packMetrics.packUnitName}" จะคำนวณเฉลี่ยเข้าต้นทุนต่อหน่วย/ต่อแพ็ก ส่วนหน่วย "ครั้ง / รอบ / เที่ยว / ล็อต" จะแยกแสดงที่ Additional Cost
@@ -3457,9 +3457,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         {
                           id: uid(),
                           name: '',
-                          unit: packMetrics.baseUnitName,
+                          unit: '',
                           amount: '',
-                          perQty: 1,
+                          perQty: '',
                           note: '',
                           vatIncluded: false,
                         },
@@ -3469,7 +3469,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   className="flex items-center gap-1.5 text-xs font-extrabold text-slate-950 bg-[#ccf835] hover:bg-[#bced28] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Add Expense Item</span>
+                  <span>Add</span>
                 </button>
                 {panelActions('cost-other')}
               </div>
@@ -3507,9 +3507,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       );
                       const cat = classifyOtherCostUnit(o.unit, packMetrics.packUnitName);
                       const displayQty =
-                        o.perQty !== undefined && o.perQty !== ''
-                          ? o.perQty
-                          : o.times || 1;
+                        o.perQty !== undefined ? o.perQty : o.times || '';
 
                       return (
                         <tr key={o.id} className="hover:bg-slate-50/70 align-top">
@@ -3522,7 +3520,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 copy[idx] = { ...copy[idx], name: e.target.value };
                                 update({ other: copy });
                               }}
-                              placeholder="เช่น ค่าแพ็คลงห่อ / ค่าขนส่ง"
+                              placeholder=""
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
                             />
                           </td>
@@ -3546,7 +3544,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   copy[idx] = { ...copy[idx], amount: e.target.value };
                                   update({ other: copy });
                                 }}
-                                placeholder="0.00"
+                                placeholder=""
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
                               />
                             )}
@@ -3583,7 +3581,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 };
                                 update({ other: copy });
                               }}
-                              placeholder="1"
+                              placeholder=""
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-center font-semibold"
                             />
                             <span className="block text-[10px] text-slate-400 text-center mt-1">
@@ -3601,7 +3599,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 copy[idx] = { ...copy[idx], unit: e.target.value };
                                 update({ other: copy });
                               }}
-                              placeholder="ซอง / ห่อ / ครั้ง"
+                              placeholder=""
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-800"
                             />
                             <span
@@ -3653,7 +3651,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 copy[idx] = { ...copy[idx], note: e.target.value };
                                 update({ other: copy });
                               }}
-                              placeholder="หมายเหตุ"
+                              placeholder=""
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
                             />
                           </td>
