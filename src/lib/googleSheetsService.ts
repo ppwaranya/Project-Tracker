@@ -1,7 +1,7 @@
 import { Holiday, Project } from './types';
 import { norm } from './trackerLogic';
 
-// นำ URL ที่ลงท้ายด้วย /exec ของคุณมาใส่ตรงนี้
+// URL ของ Google Apps Script (/exec) ของคุณ
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbySLdEBAgqzskXBdOKl1Fr5xRupoJqfXpPH2L4V7gWzV7vEgPewCyA36X0rBlKqf6Gs/exec';
 
 const CACHE_KEY_PROJECTS = 'launch_tracker_projects_cache';
@@ -14,6 +14,15 @@ export interface SyncState {
   spreadsheetId: string | null;
   spreadsheetUrl: string | null;
   error: string | null;
+}
+
+export interface ProjectImageRecord {
+  projectId: string;
+  module: 'benchmark' | 'formulation' | 'packaging';
+  itemId: string;
+  imageUrl: string;
+  fileName: string;
+  uploadedAt: string;
 }
 
 export class GoogleSheetsService {
@@ -29,16 +38,124 @@ export class GoogleSheetsService {
     return 'google-apps-script';
   }
 
-  // ดึงข้อมูลโครงการ พร้อมพารามิเตอร์ป้องกัน Browser Cache
+  // ดึงข้อมูลรูปภาพทั้งหมดจากแท็บ Project_Images
+  static async loadProjectImages(): Promise<ProjectImageRecord[]> {
+    try {
+      const res = await fetch(`${APPS_SCRIPT_URL}?type=images&t=${Date.now()}`);
+      if (!res.ok) return [];
+      const json = await res.json();
+      if (json && json.status === 'success' && Array.isArray(json.data)) {
+        return json.data;
+      }
+      return [];
+    } catch (e) {
+      console.warn('Load project images failed:', e);
+      return [];
+    }
+  }
+
+  // อัปโหลดรูปภาพเข้า Google Drive และบันทึกลงแท็บ Project_Images ผ่าน Apps Script
+  static async uploadImageToDrive(params: {
+    projectId: string;
+    module: 'benchmark' | 'formulation' | 'packaging';
+    itemId: string;
+    base64Data: string;
+    fileName: string;
+    mimeType: string;
+  }): Promise<string> {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify({
+        action: 'uploadImage',
+        ...params,
+      }),
+    });
+
+    const json = await res.json();
+    if (json && json.status === 'success' && json.imageUrl) {
+      return json.imageUrl;
+    }
+    throw new Error(json?.message || 'Failed to upload image to Google Drive');
+  }
+
+  // ลบรูปภาพออกจาก Google Drive และแท็บ Project_Images
+  static async deleteImageFromDrive(imageUrl: string): Promise<void> {
+    if (!imageUrl || !imageUrl.startsWith('http')) return;
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify({
+        action: 'deleteImage',
+        imageUrl,
+      }),
+    });
+  }
+
+  // ดึงข้อมูลโครงการ พร้อมรวมรูปภาพจากชีต Project_Images เข้ากับทุกส่วน
   static async loadProjects(_accessToken?: string, _sheetId?: string): Promise<Project[]> {
     try {
-      const res = await fetch(`${APPS_SCRIPT_URL}?type=projects&t=${Date.now()}`);
-      if (!res.ok) throw new Error('Network response was not ok');
-      const json = await res.json();
+      const [projRes, imageRecords] = await Promise.all([
+        fetch(`${APPS_SCRIPT_URL}?type=projects&t=${Date.now()}`),
+        this.loadProjectImages(),
+      ]);
+
+      if (!projRes.ok) throw new Error('Network response was not ok');
+      const json = await projRes.json();
+
       if (json && json.status === 'success' && Array.isArray(json.data) && json.data.length > 0) {
-        const normalized = json.data.map(norm);
-        localStorage.setItem(CACHE_KEY_PROJECTS, JSON.stringify(normalized));
-        return normalized;
+        const normalized: Project[] = json.data.map(norm);
+
+        // นำรูปภาพจากแท็บ Project_Images มาผูกเข้ากับแต่ละ Project, Formula และ Packaging
+        const merged = normalized.map((proj) => {
+          const projImgs = imageRecords.filter((r) => r.projectId === proj.id);
+
+          // 1. Benchmark Images
+          const bmUrls = projImgs
+            .filter((r) => r.module === 'benchmark')
+            .map((r) => r.imageUrl);
+          if (bmUrls.length > 0) {
+            const existingBm = (proj.benchmark?.images || []).filter((u) => !u.startsWith('data:'));
+            proj.benchmark = {
+              ...(proj.benchmark || { name: '', description: '', images: [] }),
+              images: Array.from(new Set([...existingBm, ...bmUrls])),
+            };
+          }
+
+          // 2. Formulation Images
+          proj.formulas = (proj.formulas || []).map((f) => {
+            const fUrls = projImgs
+              .filter((r) => r.module === 'formulation' && r.itemId === f.id)
+              .map((r) => r.imageUrl);
+            const existingF = (f.images || []).filter((u) => !u.startsWith('data:'));
+            return {
+              ...f,
+              images: Array.from(new Set([...existingF, ...fUrls])),
+            };
+          });
+
+          // 3. Packaging Images
+          proj.packaging = (proj.packaging || []).map((pkg) => {
+            const pUrls = projImgs
+              .filter((r) => r.module === 'packaging' && r.itemId === pkg.id)
+              .map((r) => r.imageUrl);
+            const existingP = (pkg.images || []).filter((u) => !u.startsWith('data:'));
+            return {
+              ...pkg,
+              images: Array.from(new Set([...existingP, ...pUrls])),
+            };
+          });
+
+          return proj;
+        });
+
+        localStorage.setItem(CACHE_KEY_PROJECTS, JSON.stringify(merged));
+        return merged;
       }
       return this.getLocalProjects() || [];
     } catch (e) {
@@ -64,7 +181,7 @@ export class GoogleSheetsService {
     }
   }
 
-  // บันทึกโครงการลง Google Sheets แบบ no-cors เพื่อเลี่ยงการบล็อกของเบราว์เซอร์
+  // บันทึกโครงการลง Google Sheets (ล้าง Base64 ที่ยาวเกินไปออกเพื่อไม่ให้ช่อง A2 พัง)
   static async saveAllProjects(
     _accessToken?: string,
     _sheetId?: string,
@@ -73,13 +190,32 @@ export class GoogleSheetsService {
   ): Promise<void> {
     localStorage.setItem(CACHE_KEY_PROJECTS, JSON.stringify(projects));
 
+    // กรองเฉพาะ URL ที่เป็นลิงก์จริงขึ้นช่อง A2 ของชีตหลัก ป้องกันตัวอักษรเกิน 50,000 ตัว
+    const sanitizedProjects = projects.map((p) => ({
+      ...p,
+      benchmark: p.benchmark
+        ? {
+            ...p.benchmark,
+            images: (p.benchmark.images || []).filter((u) => !u.startsWith('data:')),
+          }
+        : undefined,
+      formulas: (p.formulas || []).map((f) => ({
+        ...f,
+        images: (f.images || []).filter((u) => !u.startsWith('data:')),
+      })),
+      packaging: (p.packaging || []).map((pkg) => ({
+        ...pkg,
+        images: (pkg.images || []).filter((u) => !u.startsWith('data:')),
+      })),
+    }));
+
     await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: {
         'Content-Type': 'text/plain',
       },
-      body: JSON.stringify({ type: 'projects', data: projects }),
+      body: JSON.stringify({ type: 'projects', data: sanitizedProjects }),
     });
   }
 

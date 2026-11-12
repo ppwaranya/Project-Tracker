@@ -27,6 +27,7 @@ import {
   VAT_RATE,
   compressImageFile,
 } from '../lib/trackerLogic';
+import { GoogleSheetsService } from '../lib/googleSheetsService';
 import { GanttChart } from './GanttChart';
 import { CostSummary } from './CostSummary';
 import { ImagePreviewModal } from './ImagePreviewModal';
@@ -83,6 +84,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [collapsedPanels, setCollapsedPanels] = useState<Set<string>>(new Set());
   const [comparisonFormulaIds, setComparisonFormulaIds] = useState<Set<string>>(new Set());
   const [showFormulaComparison, setShowFormulaComparison] = useState(false);
+  const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
   const project = draftProject || savedProject;
   const [previewImage, setPreviewImage] = useState<{
     src: string;
@@ -258,30 +260,51 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     onUpdateProject(updated);
   };
 
-  // ฟังก์ชันบันทึกภาพ Formulation ขึ้น Google Sheets ทันที (เลียนแบบ Benchmark 100%)
-  const saveFormulaImagesImmediately = (formulaId: string, newImages: string[]) => {
-    if (isViewOnly) return;
-    const base = JSON.parse(JSON.stringify(draftProject || savedProject)) as Project;
-    base.formulas = (base.formulas || []).map((f) =>
-      f.id === formulaId ? { ...f, images: newImages } : f
-    );
-    base.updatedAt = Date.now();
-    base.rev = (base.rev || 0) + 1;
-    if (draftProject) setDraftProject(base);
-    onUpdateProject(base);
-  };
+  // อัปโหลดรูปภาพเข้า Google Drive และบันทึกลงแท็บ Project_Images
+  const handleDriveImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    module: 'benchmark' | 'formulation' | 'packaging',
+    itemId: string,
+    currentImages: string[],
+    onSuccess: (newImages: string[]) => void
+  ) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const files = Array.from(e.target.files);
+    e.target.value = '';
 
-  // ฟังก์ชันบันทึกภาพ Packaging ขึ้น Google Sheets ทันที (เลียนแบบ Benchmark 100%)
-  const savePackagingImagesImmediately = (packageId: string, newImages: string[]) => {
-    if (isViewOnly) return;
-    const base = JSON.parse(JSON.stringify(draftProject || savedProject)) as Project;
-    base.packaging = (base.packaging || []).map((p) =>
-      p.id === packageId ? { ...p, images: newImages } : p
-    );
-    base.updatedAt = Date.now();
-    base.rev = (base.rev || 0) + 1;
-    if (draftProject) setDraftProject(base);
-    onUpdateProject(base);
+    const targetKey = `${module}-${itemId}`;
+    setUploadingTarget(targetKey);
+
+    try {
+      const uploadedUrls: string[] = [];
+
+      for (const file of files) {
+        // บีบอัดรูปภาพให้คมชัดกำลังดี (1000px) ก่อนส่งเข้า Google Drive
+        const compressedBase64 = await compressImageFile(file, 1000, 1000, 0.8);
+        const driveUrl = await GoogleSheetsService.uploadImageToDrive({
+          projectId: project.id,
+          module,
+          itemId,
+          base64Data: compressedBase64,
+          fileName: file.name,
+          mimeType: file.type || 'image/jpeg',
+        });
+
+        if (driveUrl) {
+          uploadedUrls.push(driveUrl);
+        }
+      }
+
+      if (uploadedUrls.length > 0) {
+        onSuccess([...currentImages, ...uploadedUrls]);
+      } else {
+        alert('ไม่สามารถอัปโหลดรูปภาพขึ้น Google Drive ได้ กรุณาลองใหม่อีกครั้ง');
+      }
+    } catch (err) {
+      console.error('Drive upload failed:', err);
+    } finally {
+      setUploadingTarget(null);
+    }
   };
 
   const handleDuplicate = () => {
@@ -411,31 +434,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     update({ ingredients: newItems });
     setIngPasteText('');
     setShowPasteArea(false);
-  };
-
-  const handleMultipleImageUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    currentImages: string[],
-    onSuccess: (newImages: string[]) => void
-  ) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const files = Array.from(e.target.files);
-      const compressedUrls: string[] = [];
-
-      for (const file of files) {
-        try {
-          const comp = await compressImageFile(file, 600, 600, 0.65);
-          compressedUrls.push(comp);
-        } catch (err) {
-          console.error('Image compression failed:', err);
-        }
-      }
-
-      if (compressedUrls.length > 0) {
-        onSuccess([...currentImages, ...compressedUrls]);
-      }
-      e.target.value = '';
-    }
   };
 
   const handleIterateFromFormula = (sourceFormula: Formula) => {
@@ -947,17 +945,24 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   {!isViewOnly && (
                     <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Upload Images</span>
+                      <span>
+                        {uploadingTarget === 'benchmark-benchmark'
+                          ? 'Uploading to Drive...'
+                          : 'Upload Images'}
+                      </span>
                       <input
                         type="file"
                         multiple
+                        disabled={uploadingTarget !== null}
                         accept="image/png, image/jpeg, image/jpg, image/webp"
                         onClick={(e) => {
                           (e.target as HTMLInputElement).value = '';
                         }}
                         onChange={(e) =>
-                          handleMultipleImageUpload(
+                          handleDriveImageUpload(
                             e,
+                            'benchmark',
+                            'benchmark',
                             project.benchmark?.images || [],
                             (newImages) =>
                               updateImmediately({
@@ -1016,6 +1021,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           <button
                             type="button"
                             onClick={() => {
+                              GoogleSheetsService.deleteImageFromDrive(imgUrl);
                               const updatedImages = (project.benchmark?.images || []).filter(
                                 (_, idx) => idx !== imgIdx
                               );
@@ -2038,7 +2044,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           />
                         </div>
 
-                        {/* กล่องอัปโหลดภาพ Formulation: เชื่อมต่อ saveFormulaImagesImmediately บันทึกตรงแบบ Benchmark */}
                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -2048,19 +2053,31 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             {!isViewOnly && (
                               <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
                                 <Plus className="w-3.5 h-3.5" />
-                                <span>Upload Images</span>
+                                <span>
+                                  {uploadingTarget === `formulation-${f.id}`
+                                    ? 'Uploading to Drive...'
+                                    : 'Upload Images'}
+                                </span>
                                 <input
                                   type="file"
                                   multiple
+                                  disabled={uploadingTarget !== null}
                                   accept="image/png, image/jpeg, image/jpg, image/webp"
                                   onClick={(e) => {
                                     (e.target as HTMLInputElement).value = '';
                                   }}
                                   onChange={(e) =>
-                                    handleMultipleImageUpload(
+                                    handleDriveImageUpload(
                                       e,
+                                      'formulation',
+                                      f.id,
                                       f.images || [],
-                                      (newImgs) => saveFormulaImagesImmediately(f.id, newImgs)
+                                      (newImgs) => {
+                                        const newFs = project.formulas.map((x) =>
+                                          x.id === f.id ? { ...x, images: newImgs } : x
+                                        );
+                                        updateImmediately({ formulas: newFs });
+                                      }
                                     )
                                   }
                                   className="hidden"
@@ -2106,10 +2123,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <button
                                       type="button"
                                       onClick={() => {
+                                        GoogleSheetsService.deleteImageFromDrive(imgUrl);
                                         const newImgs = (f.images || []).filter(
                                           (_, idx) => idx !== imgIdx
                                         );
-                                        saveFormulaImagesImmediately(f.id, newImgs);
+                                        const newFs = project.formulas.map((x) =>
+                                          x.id === f.id ? { ...x, images: newImgs } : x
+                                        );
+                                        updateImmediately({ formulas: newFs });
                                       }}
                                       className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                     >
@@ -2947,7 +2968,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         )}
                       </div>
 
-                      {/* กล่องอัปโหลดภาพ Packaging: เชื่อมต่อ savePackagingImagesImmediately บันทึกตรงแบบ Benchmark */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <label className="block text-xs font-bold text-slate-700">
@@ -2956,19 +2976,31 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           {!isViewOnly && (
                             <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
                               <Plus className="w-3.5 h-3.5" />
-                              <span>Upload Images</span>
+                              <span>
+                                {uploadingTarget === `packaging-${it.id}`
+                                  ? 'Uploading to Drive...'
+                                  : 'Upload Images'}
+                              </span>
                               <input
                                 type="file"
                                 multiple
+                                disabled={uploadingTarget !== null}
                                 accept="image/png, image/jpeg, image/jpg, image/webp"
                                 onClick={(e) => {
                                   (e.target as HTMLInputElement).value = '';
                                 }}
                                 onChange={(e) =>
-                                  handleMultipleImageUpload(
+                                  handleDriveImageUpload(
                                     e,
+                                    'packaging',
+                                    it.id,
                                     it.images || [],
-                                    (newImgs) => savePackagingImagesImmediately(it.id, newImgs)
+                                    (newImgs) => {
+                                      const copy = project.packaging.map((x) =>
+                                        x.id === it.id ? { ...x, images: newImgs } : x
+                                      );
+                                      updateImmediately({ packaging: copy });
+                                    }
                                   )
                                 }
                                 className="hidden"
@@ -3015,10 +3047,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => {
+                                      GoogleSheetsService.deleteImageFromDrive(imgUrl);
                                       const newImgs = (it.images || []).filter(
                                         (_, idx) => idx !== imgIdx
                                       );
-                                      savePackagingImagesImmediately(it.id, newImgs);
+                                      const copy = project.packaging.map((x) =>
+                                        x.id === it.id ? { ...x, images: newImgs } : x
+                                      );
+                                      updateImmediately({ packaging: copy });
                                     }}
                                     className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                   >
