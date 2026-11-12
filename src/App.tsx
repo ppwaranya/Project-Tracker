@@ -601,32 +601,9 @@ export default function App() {
         costPrivacy={effectiveCostPrivacy}
         onToggleCostPrivacy={handleToggleCostPrivacy}
         syncState={syncState}
+        onForceSync={forcePushToGoogleSheets}
         onOpenHolidays={() => setIsHolidayModalOpen(true)}
       />
-
-      <div className="max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pt-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span className={`inline-block w-2.5 h-2.5 rounded-full ${syncState.isSyncing ? 'bg-amber-400 animate-pulse' : syncState.isSynced ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-          <span>
-            {syncState.isSyncing
-              ? 'กำลังซิงก์ข้อมูลกับ Google Sheets...'
-              : syncState.lastSyncedAt
-              ? `ซิงก์ล่าสุด: ${new Date(syncState.lastSyncedAt).toLocaleTimeString('th-TH')}`
-              : 'พร้อมใช้งาน'}
-          </span>
-        </div>
-
-        <button
-          onClick={forcePushToGoogleSheets}
-          disabled={syncState.isSyncing}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white shadow-xs transition-all disabled:opacity-50 cursor-pointer"
-        >
-          <svg className={`w-3.5 h-3.5 ${syncState.isSyncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Force Sync (ดันขึ้นชีตทันที)
-        </button>
-      </div>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
         {currentProjectId ? (

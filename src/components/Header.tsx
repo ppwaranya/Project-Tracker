@@ -21,6 +21,7 @@ interface HeaderProps {
   costPrivacy: boolean;
   onToggleCostPrivacy: () => void;
   syncState: SyncState;
+  onForceSync: () => void;
   onOpenHolidays: () => void;
 }
 
@@ -33,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
   costPrivacy,
   onToggleCostPrivacy,
   syncState,
+  onForceSync,
   onOpenHolidays,
 }) => {
   const isAdmin = currentUser?.role === 'Admin';
@@ -92,7 +94,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 sm:h-16 gap-2 sm:gap-3">
-          {/* Brand - Project Tracker (Niond Style) */}
+          {/* Brand - Project Tracker */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {isSharedProjectView ? (
               <div className="flex items-center gap-2.5 sm:gap-3 text-slate-900 flex-shrink-0">
@@ -133,7 +135,7 @@ export const Header: React.FC<HeaderProps> = ({
               aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={isMenuOpen}
               aria-haspopup="menu"
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-2xs transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ccf835]"
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-2xs transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ccf835] cursor-pointer"
             >
               {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
@@ -162,7 +164,7 @@ export const Header: React.FC<HeaderProps> = ({
                       onToggleCostPrivacy();
                       setIsMenuOpen(false);
                     }}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
                   >
                     {costPrivacy ? (
                       <EyeOff className="h-4 w-4" />
@@ -179,52 +181,66 @@ export const Header: React.FC<HeaderProps> = ({
                     onOpenHolidays();
                     setIsMenuOpen(false);
                   }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
                 >
                   <Calendar className="h-4 w-4" />
                   Holidays
                 </button>
 
                 {isAdmin && (
-                  <>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      onOpenUserManagement();
+                      setIsMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                  >
+                    <Users className="h-4 w-4" />
+                    Users &amp; Roles
+                  </button>
+                )}
+
+                {/* ส่วนสถานะซิงก์และปุ่ม Force Sync ย้ายมาไว้ในเมนูแฮมเบอร์เกอร์ */}
+                <div className="my-1 border-t border-slate-100" />
+                <div className="px-3 py-2 space-y-2 bg-slate-50/80 rounded-xl">
+                  <div className="flex items-center gap-2 text-xs text-slate-600">
+                    <span
+                      className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
+                        syncState.isSyncing
+                          ? 'bg-amber-400 animate-pulse'
+                          : syncState.isSynced
+                          ? 'bg-emerald-500'
+                          : 'bg-slate-400'
+                      }`}
+                    />
+                    <span className="truncate font-medium">
+                      {syncState.isSyncing
+                        ? 'กำลังซิงก์ข้อมูลกับ Google Sheets...'
+                        : syncState.lastSyncedAt
+                        ? `ซิงก์ล่าสุด: ${new Date(syncState.lastSyncedAt).toLocaleTimeString('th-TH')}`
+                        : 'พร้อมใช้งาน'}
+                    </span>
+                  </div>
+
+                  {!isViewer && (
                     <button
                       role="menuitem"
+                      type="button"
+                      disabled={syncState.isSyncing}
                       onClick={() => {
-                        onOpenUserManagement();
+                        onForceSync();
                         setIsMenuOpen(false);
                       }}
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                    >
-                      <Users className="h-4 w-4" />
-                      Users &amp; Roles
-                    </button>
-
-                    <div
-                      role="status"
-                      title={syncState.error || 'Live project data stored in Data Sheets'}
-                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700"
+                      className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-2 text-xs font-bold text-white shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
                     >
                       <RefreshCw
-                        className={`h-4 w-4 ${
-                          syncState.isSyncing
-                            ? 'animate-spin text-amber-500'
-                            : syncState.error
-                              ? 'text-amber-600'
-                            : syncState.isSynced
-                              ? 'text-emerald-600'
-                              : 'text-slate-400'
-                        }`}
+                        className={`h-3.5 w-3.5 ${syncState.isSyncing ? 'animate-spin' : ''}`}
                       />
-                      {syncState.isSyncing
-                        ? 'Saving to Data Sheets...'
-                        : syncState.error
-                          ? 'Sync delayed'
-                        : syncState.isSynced
-                          ? 'Data Sheets Live'
-                          : 'Data Sheets'}
-                    </div>
-                  </>
-                )}
+                      <span>Force Sync (ดันขึ้นชีตทันที)</span>
+                    </button>
+                  )}
+                </div>
 
                 <div className="my-1 border-t border-slate-100" />
 
@@ -235,7 +251,7 @@ export const Header: React.FC<HeaderProps> = ({
                       onAppLogout();
                       setIsMenuOpen(false);
                     }}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-rose-700 hover:bg-rose-50"
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer"
                   >
                     <LogOut className="h-4 w-4" />
                     Sign out of Project Tracker
