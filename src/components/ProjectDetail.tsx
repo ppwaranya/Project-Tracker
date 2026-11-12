@@ -3009,20 +3009,27 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         <label className="block text-xs font-bold text-slate-700 mb-1">
                           Supplier / Printer
                         </label>
-                        <input
-                          type="text"
-                          value={it.supplier}
-                          onChange={(e) => {
-                            const copy = project.packaging.map((x) =>
-                              x.id === it.id
-                                ? { ...x, supplier: e.target.value }
-                                : x
-                            );
-                            update({ packaging: copy });
-                          }}
-                          placeholder=""
-                          className="w-full text-xs px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
-                        />
+                        {isViewOnly || isSharedProjectView ? (
+                          <div className="w-full text-xs px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-100 font-mono text-slate-400 flex items-center gap-1.5">
+                            <EyeOff className="w-3.5 h-3.5 shrink-0" />
+                            <span>•••••• (Restricted)</span>
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            value={it.supplier}
+                            onChange={(e) => {
+                              const copy = project.packaging.map((x) =>
+                                x.id === it.id
+                                  ? { ...x, supplier: e.target.value }
+                                  : x
+                              );
+                              update({ packaging: copy });
+                            }}
+                            placeholder=""
+                            className="w-full text-xs px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
+                          />
+                        )}
                       </div>
 
                       <div>
