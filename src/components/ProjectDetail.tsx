@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CostBasisLevel,
   Formula,
@@ -88,16 +88,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [editingPanel, setEditingPanel] = useState<string | null>(null);
   const [draftProject, setDraftProject] = useState<Project | null>(null);
 
-  // จำค่าการยุบ/ขยายกรอบแยกตามโปรเจกต์ไว้ใน localStorage (รีเฟรชหน้าแล้วไม่เด้งกลับ)
-  const collapseStorageKey = `pwell_collapsed_${savedProject.id}`;
-  const [collapsedPanels, setCollapsedPanels] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem(collapseStorageKey);
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
+  // เก็บสถานะการยุบ/ขยายกรอบไว้ในข้อมูลโปรเจกต์เพื่อซิงก์ข้ามทุกอุปกรณ์ผ่าน Google Sheets
+  const [collapsedPanels, setCollapsedPanels] = useState<Set<string>>(
+    () => new Set(savedProject.collapsedPanels || [])
+  );
+
+  // อัปเดตสถานะการยุบ/ขยายอัตโนมัติเมื่อเปิดในอุปกรณ์อื่นหรือมีการซิงก์ข้อมูลใหม่
+  useEffect(() => {
+    setCollapsedPanels(new Set(savedProject.collapsedPanels || []));
+  }, [savedProject.id, JSON.stringify(savedProject.collapsedPanels || [])]);
 
   const [comparisonFormulaIds, setComparisonFormulaIds] = useState<Set<string>>(new Set());
   const [showFormulaComparison, setShowFormulaComparison] = useState(false);
@@ -135,16 +134,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const panelToggle = (panelId: string) => {
     const isCollapsed = collapsedPanels.has(panelId);
     const label = isCollapsed ? 'Expand section' : 'Collapse section';
-    const togglePanel = () =>
-      setCollapsedPanels((current) => {
-        const next = new Set(current);
-        if (next.has(panelId)) next.delete(panelId);
-        else next.add(panelId);
-        try {
-          localStorage.setItem(collapseStorageKey, JSON.stringify(Array.from(next)));
-        } catch {}
-        return next;
-      });
+    const togglePanel = () => {
+      const next = new Set(collapsedPanels);
+      if (next.has(panelId)) next.delete(panelId);
+      else next.add(panelId);
+      setCollapsedPanels(next);
+      updateImmediately({ collapsedPanels: Array.from(next) });
+    };
 
     return (
       <div

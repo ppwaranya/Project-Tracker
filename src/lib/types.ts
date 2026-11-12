@@ -167,6 +167,7 @@ export interface Project {
   packaging: PackagingItem[];
   other: OtherCostItem[];
   docs: ProjectDocument[];
+  collapsedPanels?: string[];
   phases: Phase[];
   createdAt: number;
   updatedAt?: number;
