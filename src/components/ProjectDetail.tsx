@@ -87,7 +87,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const [editingPanel, setEditingPanel] = useState<string | null>(null);
   const [draftProject, setDraftProject] = useState<Project | null>(null);
-  const [collapsedPanels, setCollapsedPanels] = useState<Set<string>>(new Set());
+
+  // จำค่าการยุบ/ขยายกรอบแยกตามโปรเจกต์ไว้ใน localStorage (รีเฟรชหน้าแล้วไม่เด้งกลับ)
+  const collapseStorageKey = `pwell_collapsed_${savedProject.id}`;
+  const [collapsedPanels, setCollapsedPanels] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(collapseStorageKey);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
   const [comparisonFormulaIds, setComparisonFormulaIds] = useState<Set<string>>(new Set());
   const [showFormulaComparison, setShowFormulaComparison] = useState(false);
   const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
@@ -129,6 +140,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         const next = new Set(current);
         if (next.has(panelId)) next.delete(panelId);
         else next.add(panelId);
+        try {
+          localStorage.setItem(collapseStorageKey, JSON.stringify(Array.from(next)));
+        } catch {}
         return next;
       });
 
@@ -2839,14 +2853,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           disabled={!canEdit(packagePanelId)}
                           value={it.type}
                           onChange={(e) => {
-                            const newType = e.target.value as any;
+                            const newType = e.target.value as PackagingItem['type'];
+                            const nextBasis: CostBasisLevel =
+                              newType === 'Secondary Package' ? 'pack' : 'unit';
                             const copy = project.packaging.map((x) =>
                               x.id === it.id
                                 ? {
                                     ...x,
                                     type: newType,
-                                    costBasis:
-                                      newType === 'Secondary Package' ? 'pack' : 'unit'as CostBasisLevel,
+                                    costBasis: nextBasis,
                                   }
                                 : x
                             );
