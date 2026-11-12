@@ -54,17 +54,18 @@ export class GoogleSheetsService {
     }
   }
 
-  // อัปโหลดรูปภาพเข้า Google Drive และบันทึกลงแท็บ Project_Images ผ่าน Apps Script
+// อัปโหลดรูปภาพเข้า Google Drive และบันทึกลงชีต Project_Images
   static async uploadImageToDrive(params: {
     projectId: string;
     module: 'benchmark' | 'formulation' | 'packaging';
     itemId: string;
     base64Data: string;
     fileName: string;
-    mimeType: string;
+    mimeType?: string;
   }): Promise<string> {
     const res = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
+      redirect: 'follow',
       headers: {
         'Content-Type': 'text/plain;charset=utf-8',
       },
@@ -74,11 +75,19 @@ export class GoogleSheetsService {
       }),
     });
 
-    const json = await res.json();
-    if (json && json.status === 'success' && json.imageUrl) {
-      return json.imageUrl;
+    const text = await res.text();
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error('Apps Script ตอบกลับผิดรูปแบบ (โปรดเช็กการ Deploy New Version)');
     }
-    throw new Error(json?.message || 'Failed to upload image to Google Drive');
+
+    if (json.status !== 'success' || !json.imageUrl) {
+      throw new Error(json.message || 'อัปโหลดรูปภาพไม่สำเร็จ');
+    }
+
+    return json.imageUrl;
   }
 
   // ลบรูปภาพออกจาก Google Drive และแท็บ Project_Images

@@ -51,6 +51,7 @@ import {
   Lock,
   ChevronDown,
   ChevronRight,
+  Loader2,
 } from 'lucide-react';
 
 interface ProjectDetailProps {
@@ -244,7 +245,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     );
   };
 
-  // บันทึกข้อมูลและสั่ง sync ทันที
   const updateImmediately = (partial: Partial<Project>) => {
     if (isViewOnly) return;
     const base = draftProject || savedProject;
@@ -260,51 +260,28 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     onUpdateProject(updated);
   };
 
-  // อัปโหลดรูปภาพเข้า Google Drive และบันทึกลงแท็บ Project_Images
-  const handleDriveImageUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    module: 'benchmark' | 'formulation' | 'packaging',
-    itemId: string,
-    currentImages: string[],
-    onSuccess: (newImages: string[]) => void
-  ) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const files = Array.from(e.target.files);
-    e.target.value = '';
+  const saveFormulaImagesImmediately = (formulaId: string, newImages: string[]) => {
+    if (isViewOnly) return;
+    const base = JSON.parse(JSON.stringify(draftProject || savedProject)) as Project;
+    base.formulas = (base.formulas || []).map((f) =>
+      f.id === formulaId ? { ...f, images: newImages } : f
+    );
+    base.updatedAt = Date.now();
+    base.rev = (base.rev || 0) + 1;
+    if (draftProject) setDraftProject(base);
+    onUpdateProject(base);
+  };
 
-    const targetKey = `${module}-${itemId}`;
-    setUploadingTarget(targetKey);
-
-    try {
-      const uploadedUrls: string[] = [];
-
-      for (const file of files) {
-        // บีบอัดรูปภาพให้คมชัดกำลังดี (1000px) ก่อนส่งเข้า Google Drive
-        const compressedBase64 = await compressImageFile(file, 1000, 1000, 0.8);
-        const driveUrl = await GoogleSheetsService.uploadImageToDrive({
-          projectId: project.id,
-          module,
-          itemId,
-          base64Data: compressedBase64,
-          fileName: file.name,
-          mimeType: file.type || 'image/jpeg',
-        });
-
-        if (driveUrl) {
-          uploadedUrls.push(driveUrl);
-        }
-      }
-
-      if (uploadedUrls.length > 0) {
-        onSuccess([...currentImages, ...uploadedUrls]);
-      } else {
-        alert('ไม่สามารถอัปโหลดรูปภาพขึ้น Google Drive ได้ กรุณาลองใหม่อีกครั้ง');
-      }
-    } catch (err) {
-      console.error('Drive upload failed:', err);
-    } finally {
-      setUploadingTarget(null);
-    }
+  const savePackagingImagesImmediately = (packageId: string, newImages: string[]) => {
+    if (isViewOnly) return;
+    const base = JSON.parse(JSON.stringify(draftProject || savedProject)) as Project;
+    base.packaging = (base.packaging || []).map((p) =>
+      p.id === packageId ? { ...p, images: newImages } : p
+    );
+    base.updatedAt = Date.now();
+    base.rev = (base.rev || 0) + 1;
+    if (draftProject) setDraftProject(base);
+    onUpdateProject(base);
   };
 
   const handleDuplicate = () => {
@@ -434,6 +411,47 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     update({ ingredients: newItems });
     setIngPasteText('');
     setShowPasteArea(false);
+  };
+
+  // อัปโหลดไฟล์เข้า Google Drive และรับลิงก์ URL กลับมาบันทึกทันที
+  const handleMultipleImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    moduleName: 'benchmark' | 'formulation' | 'packaging',
+    itemId: string,
+    currentImages: string[],
+    onSuccess: (newImages: string[]) => void
+  ) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      const targetKey = `${moduleName}-${itemId}`;
+      setUploadingTarget(targetKey);
+      const uploadedUrls: string[] = [];
+
+      try {
+        for (const file of files) {
+          const compBase64 = await compressImageFile(file, 1000, 1000, 0.8);
+          const driveUrl = await GoogleSheetsService.uploadImageToDrive({
+            projectId: project.id,
+            module: moduleName,
+            itemId: itemId,
+            base64Data: compBase64,
+            fileName: file.name,
+            mimeType: file.type || 'image/jpeg',
+          });
+          uploadedUrls.push(driveUrl);
+        }
+
+        if (uploadedUrls.length > 0) {
+          onSuccess([...currentImages, ...uploadedUrls]);
+        }
+      } catch (err: any) {
+        console.error('Upload error:', err);
+        alert(`อัปโหลดรูปภาพไม่สำเร็จ: ${err?.message || 'กรุณาตรวจสอบการ Deploy Apps Script'}`);
+      } finally {
+        setUploadingTarget(null);
+        e.target.value = '';
+      }
+    }
   };
 
   const handleIterateFromFormula = (sourceFormula: Formula) => {
@@ -944,12 +962,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   </label>
                   {!isViewOnly && (
                     <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>
-                        {uploadingTarget === 'benchmark-benchmark'
-                          ? 'Uploading to Drive...'
-                          : 'Upload Images'}
-                      </span>
+                      {uploadingTarget === 'benchmark-benchmark-main' ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                          <span className="text-amber-700">Uploading to Drive...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Upload Images</span>
+                        </>
+                      )}
                       <input
                         type="file"
                         multiple
@@ -959,10 +982,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           (e.target as HTMLInputElement).value = '';
                         }}
                         onChange={(e) =>
-                          handleDriveImageUpload(
+                          handleMultipleImageUpload(
                             e,
                             'benchmark',
-                            'benchmark',
+                            'benchmark-main',
                             project.benchmark?.images || [],
                             (newImages) =>
                               updateImmediately({
@@ -2044,6 +2067,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           />
                         </div>
 
+                        {/* กล่องอัปโหลดภาพ Formulation เข้า Google Drive */}
                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -2052,12 +2076,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             </span>
                             {!isViewOnly && (
                               <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>
-                                  {uploadingTarget === `formulation-${f.id}`
-                                    ? 'Uploading to Drive...'
-                                    : 'Upload Images'}
-                                </span>
+                                {uploadingTarget === `formulation-${f.id}` ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                                    <span className="text-amber-700">Uploading to Drive...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Plus className="w-3.5 h-3.5" />
+                                    <span>Upload Images</span>
+                                  </>
+                                )}
                                 <input
                                   type="file"
                                   multiple
@@ -2067,17 +2096,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     (e.target as HTMLInputElement).value = '';
                                   }}
                                   onChange={(e) =>
-                                    handleDriveImageUpload(
+                                    handleMultipleImageUpload(
                                       e,
                                       'formulation',
                                       f.id,
                                       f.images || [],
-                                      (newImgs) => {
-                                        const newFs = project.formulas.map((x) =>
-                                          x.id === f.id ? { ...x, images: newImgs } : x
-                                        );
-                                        updateImmediately({ formulas: newFs });
-                                      }
+                                      (newImgs) => saveFormulaImagesImmediately(f.id, newImgs)
                                     )
                                   }
                                   className="hidden"
@@ -2127,10 +2151,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                         const newImgs = (f.images || []).filter(
                                           (_, idx) => idx !== imgIdx
                                         );
-                                        const newFs = project.formulas.map((x) =>
-                                          x.id === f.id ? { ...x, images: newImgs } : x
-                                        );
-                                        updateImmediately({ formulas: newFs });
+                                        saveFormulaImagesImmediately(f.id, newImgs);
                                       }}
                                       className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                     >
@@ -2968,6 +2989,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         )}
                       </div>
 
+                      {/* กล่องอัปโหลดภาพ Packaging เข้า Google Drive */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <label className="block text-xs font-bold text-slate-700">
@@ -2975,12 +2997,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           </label>
                           {!isViewOnly && (
                             <label className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1">
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>
-                                {uploadingTarget === `packaging-${it.id}`
-                                  ? 'Uploading to Drive...'
-                                  : 'Upload Images'}
-                              </span>
+                              {uploadingTarget === `packaging-${it.id}` ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                                  <span className="text-amber-700">Uploading to Drive...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>Upload Images</span>
+                                </>
+                              )}
                               <input
                                 type="file"
                                 multiple
@@ -2990,17 +3017,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   (e.target as HTMLInputElement).value = '';
                                 }}
                                 onChange={(e) =>
-                                  handleDriveImageUpload(
+                                  handleMultipleImageUpload(
                                     e,
                                     'packaging',
                                     it.id,
                                     it.images || [],
-                                    (newImgs) => {
-                                      const copy = project.packaging.map((x) =>
-                                        x.id === it.id ? { ...x, images: newImgs } : x
-                                      );
-                                      updateImmediately({ packaging: copy });
-                                    }
+                                    (newImgs) => savePackagingImagesImmediately(it.id, newImgs)
                                   )
                                 }
                                 className="hidden"
@@ -3051,10 +3073,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                       const newImgs = (it.images || []).filter(
                                         (_, idx) => idx !== imgIdx
                                       );
-                                      const copy = project.packaging.map((x) =>
-                                        x.id === it.id ? { ...x, images: newImgs } : x
-                                      );
-                                      updateImmediately({ packaging: copy });
+                                      savePackagingImagesImmediately(it.id, newImgs);
                                     }}
                                     className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                   >
