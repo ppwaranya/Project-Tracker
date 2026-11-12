@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  CostBasisLevel,
   Formula,
   PackagingItem,
   PackagingStatus,
@@ -9,12 +10,14 @@ import {
 import {
   baht,
   calcOtherItemTotal,
+  classifyOtherCostUnit,
   compute,
   costOf,
   displayCategory,
   DOC_TYPES,
   flatTasks,
   fmt,
+  getPackMetrics,
   PACKAGING_STATUS_LIST,
   PKG_TYPES,
   REGULATORY_STATUS_LIST,
@@ -53,6 +56,7 @@ import {
   ChevronDown,
   ChevronRight,
   Loader2,
+  PackageCheck,
 } from 'lucide-react';
 
 interface ProjectDetailProps {
@@ -231,6 +235,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const cs = compute(project, holidaysSet);
   const co = costOf(project);
   const s = summ(project, cs, co, holidaysSet);
+  const packMetrics = getPackMetrics(project);
 
   const update = (partial: Partial<Project>) => {
     if (!editingPanel || isViewOnly) return;
@@ -426,7 +431,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     setShowPasteArea(false);
   };
 
-  // อัปโหลดไฟล์เข้า Google Drive และรับลิงก์ URL กลับมาบันทึกทันที
   const handleMultipleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     moduleName: 'benchmark' | 'formulation' | 'packaging',
@@ -696,7 +700,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
         <div className="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs flex flex-col justify-between">
           <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block mb-1">
-            Total Unit Cost
+            {packMetrics.isMultiPack
+              ? `Cost / ${packMetrics.baseUnitName} & ${packMetrics.packUnitName}`
+              : 'Total Unit Cost'}
           </span>
           {costPrivacy ? (
             <div className="flex items-center gap-1.5 text-slate-600 bg-slate-100 px-2.5 py-1 rounded-xl text-xs font-bold font-mono">
@@ -705,12 +711,21 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
           ) : (
             <div>
-              <b className="text-xl sm:text-2xl font-black text-slate-900">
-                {co.unit > 0 ? `${baht(co.unit)} ฿` : '-'}
+              <b className="text-lg sm:text-xl font-black text-slate-900">
+                {co.unit > 0 ? `${baht(co.unit)} ฿/${packMetrics.baseUnitName}` : '-'}
               </b>
+              {packMetrics.isMultiPack && co.packCost > 0 && (
+                <div className="text-xs font-extrabold text-teal-700 mt-0.5">
+                  {baht(co.packCost)} ฿/{packMetrics.packUnitName} ({packMetrics.unitsPerPack} {packMetrics.baseUnitName})
+                </div>
+              )}
               <span className="text-[11px] text-slate-400 mt-0.5 block truncate font-medium">
                 {co.q
-                  ? `Lot: ${baht(co.batch)} ฿ (${Number(co.q).toLocaleString('en-US')} pcs)`
+                  ? packMetrics.isMultiPack
+                    ? `${co.fullPacks.toLocaleString()} ${packMetrics.packUnitName}${
+                        co.remainderUnits > 0 ? ` + เศษ ${co.remainderUnits} ${packMetrics.baseUnitName}` : ''
+                      }`
+                    : `Lot: ${baht(co.batch)} ฿ (${Number(co.q).toLocaleString('en-US')} ${packMetrics.baseUnitName})`
                   : 'Enter quantity in Overview'}
               </span>
             </div>
@@ -819,21 +834,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Order Quantity (Units)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={project.qty}
-                  onChange={(e) => update({ qty: e.target.value })}
-                  placeholder=""
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
                   Project Start Date
                 </label>
                 <input
@@ -864,9 +864,105 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   type="text"
                   value={project.pack}
                   onChange={(e) => update({ pack: e.target.value })}
-                  placeholder=""
+                  placeholder="เช่น 15 g / sachet"
                   className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white"
                 />
+              </div>
+
+              {/* กล่องกำหนดโครงสร้างจำนวนผลิตและสัดส่วนการบรรจุ (Base Unit vs Sellable Pack) */}
+              <div className="col-span-full p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <PackageCheck className="w-4 h-4 text-teal-600" />
+                    <span>โครงสร้างการผลิตและการบรรจุ (Production Quantity & Pack Ratio)</span>
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    รองรับทั้ง 1:1 (สกินแคร์) และ 1 แพ็กบรรจุหลายหน่วยย่อย (เช่น 1 ห่อ มี 7 ซอง หรือ 1 กระปุก มี 30 เม็ด)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      จำนวนผลิตทั้งหมด (Total Base Units)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={project.qty}
+                      onChange={(e) => update({ qty: e.target.value })}
+                      placeholder="เช่น 30000"
+                      className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white font-bold text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      ชื่อหน่วยย่อย (Base Unit Name)
+                    </label>
+                    <input
+                      type="text"
+                      value={project.baseUnitName || ''}
+                      onChange={(e) => update({ baseUnitName: e.target.value })}
+                      placeholder="เช่น ซอง / เม็ด / ชิ้น"
+                      className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      อัตราบรรจุต่อแพ็ก (Units / Pack)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={project.unitsPerPack ?? 1}
+                      onChange={(e) => update({ unitsPerPack: e.target.value })}
+                      placeholder="1"
+                      className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white font-bold text-teal-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      ชื่อแพ็กขาย (Sellable Pack Name)
+                    </label>
+                    <input
+                      type="text"
+                      value={project.packUnitName || ''}
+                      onChange={(e) => update({ packUnitName: e.target.value })}
+                      placeholder="เช่น ห่อ / กล่อง / กระปุก"
+                      className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-white font-medium"
+                    />
+                  </div>
+                </div>
+
+                {/* แสดงผลลัพธ์จำนวนแพ็กขายได้จริงและเศษคงเหลือทันที */}
+                {packMetrics.totalUnits > 0 && packMetrics.isMultiPack && (
+                  <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between flex-wrap gap-2 text-xs">
+                    <div className="text-slate-700">
+                      สรุปจำนวนแพ็กขายจริง:{' '}
+                      <strong className="text-teal-800 text-sm">
+                        {packMetrics.fullPacks.toLocaleString('en-US')} {packMetrics.packUnitName}
+                      </strong>{' '}
+                      <span className="text-slate-500">
+                        (บรรจุ {packMetrics.packUnitName}ละ {packMetrics.unitsPerPack} {packMetrics.baseUnitName})
+                      </span>
+                    </div>
+
+                    {packMetrics.remainderUnits > 0 ? (
+                      <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-950 font-bold border border-amber-300">
+                        เหลือเศษ {packMetrics.remainderUnits.toLocaleString('en-US')} {packMetrics.baseUnitName} (ไม่เต็ม{packMetrics.packUnitName} · เก็บเป็น QC / Sample)
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 font-bold">
+                        ลงตัวพอดี ไม่มีเศษคงเหลือ
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="col-span-full">
@@ -1706,7 +1802,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       ?.ver
                   }
                 </strong>{' '}
-                · สามารถกดเลือกสูตรและขั้นราคาได้อิสระโดยไม่ต้องกด Edit
+                · ราคาต่อหน่วยย่อย ({packMetrics.baseUnitName})
               </p>
             </div>
 
@@ -1849,7 +1945,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               .reverse()
               .map((f) => {
                 const isChosen = f.id === project.chosenFormula;
-                const formulaPriceRes = resolveFormulaPrice(f, Number(project.qty) || 0);
+                const formulaPriceRes = resolveFormulaPrice(f, packMetrics.totalUnits);
 
                 const originalIndex = project.formulas.findIndex((x) => x.id === f.id);
                 let deltaText = '';
@@ -1857,7 +1953,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   const prevFormula = project.formulas[originalIndex - 1];
                   const prevPriceRes = resolveFormulaPrice(
                     prevFormula,
-                    Number(project.qty) || 0
+                    packMetrics.totalUnits
                   );
                   if (formulaPriceRes.has && prevPriceRes.has) {
                     const diff =
@@ -1958,7 +2054,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             <>
                               <span className="font-extrabold text-slate-800 text-sm">
                                 {formulaPriceRes.has
-                                  ? `${baht(formulaPriceRes.price * (f.vatIncluded ? 1 : 1 + VAT_RATE))} ฿ / pc`
+                                  ? `${baht(formulaPriceRes.price * (f.vatIncluded ? 1 : 1 + VAT_RATE))} ฿ / ${packMetrics.baseUnitName}`
                                   : 'Price not set'}
                               </span>
                               {deltaText && (
@@ -2005,7 +2101,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           <span>Confirm Formulation</span>
                         </button>
 
-                        {/* ปุ่ม Use for Costing กดเลือกสูตรคิดต้นทุนได้อิสระทันที */}
                         <label
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-colors ${
                             isViewOnly
@@ -2096,7 +2191,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           />
                         </div>
 
-                        {/* กล่องอัปโหลดภาพ Formulation เข้า Google Drive */}
                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -2213,11 +2307,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         </div>
                       </div>
 
-                      {/* กล่อง Tiered Pricing ของสูตร — กดเลือก Tier ราคาได้อิสระโดยไม่ต้องกด Edit */}
                       <div className="bg-slate-50/90 p-4 rounded-2xl border border-slate-200 space-y-2.5">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <span className="text-xs font-bold text-slate-800">
-                            Tiered Pricing (ราคาขั้นบันได)
+                            Tiered Pricing (ต่อ {packMetrics.baseUnitName})
                           </span>
                           <label className="text-[11px] text-slate-600 flex items-center gap-1">
                             VAT
@@ -2254,8 +2347,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               <thead>
                                 <tr className="text-slate-500 font-bold border-b border-slate-200 text-[11px]">
                                   <th className="py-1 w-14 text-center">เลือกใช้</th>
-                                  <th className="py-1">From (Units)</th>
-                                  <th className="py-1">Price (THB/pc)</th>
+                                  <th className="py-1">From ({packMetrics.baseUnitName})</th>
+                                  <th className="py-1">Price (THB/{packMetrics.baseUnitName})</th>
                                   {canEdit(`formula-${f.id}`) && <th className="py-1 w-8"></th>}
                                 </tr>
                               </thead>
@@ -2610,7 +2703,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 Packaging & Materials Specifications
               </h3>
               <p className="text-xs text-slate-500">
-                {project.packaging.length} packaging components tracked · สามารถกดติ๊ก Include และเลือกขั้นราคาได้ทันทีโดยไม่ต้องกด Edit
+                {project.packaging.length} components tracked
+                {packMetrics.isMultiPack && packMetrics.totalUnits > 0
+                  ? ` · ฐานผลิต: ${packMetrics.totalUnits.toLocaleString()} ${packMetrics.baseUnitName} / ${packMetrics.fullPacks.toLocaleString()} ${packMetrics.packUnitName}`
+                  : ''}
               </p>
             </div>
 
@@ -2628,6 +2724,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       moq: '',
                       steps: [{ qty: '', price: '' }],
                       selectedStepIdx: null,
+                      costBasis: 'unit',
                       note: '',
                       images: [],
                       plateCost: '',
@@ -2656,12 +2753,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </div>
             ) : (
               project.packaging.map((it) => {
-                const pkgPriceRes = resolvePackagingPrice(it, Number(project.qty) || 0);
+                const basis: CostBasisLevel =
+                  it.costBasis || (it.type === 'Secondary Package' ? 'pack' : 'unit');
+                const basisQty =
+                  basis === 'pack' ? packMetrics.fullPacks : packMetrics.totalUnits;
+                const basisUnitLabel =
+                  basis === 'pack' ? packMetrics.packUnitName : packMetrics.baseUnitName;
+
+                const pkgPriceRes = resolvePackagingPrice(it, basisQty);
                 const packagePanelId = `packaging-${it.id}`;
                 const isBelowMoq =
-                  project.qty &&
+                  basisQty > 0 &&
                   Number(it.moq) &&
-                  Number(project.qty) < Number(it.moq);
+                  basisQty < Number(it.moq);
 
                 return (
                   <div
@@ -2673,8 +2777,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        {/* กดติ๊ก Include in Cost Calculation ได้อิสระทันทีโดยไม่ต้องกด Edit */}
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        {/* กดติ๊ก Include in Cost Calculation ได้อิสระทันที */}
                         <label
                           className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-colors ${
                             isViewOnly
@@ -2699,17 +2803,51 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             className="w-4 h-4 accent-teal-600 rounded-sm cursor-pointer disabled:opacity-50"
                           />
                           <span className="text-xs font-bold text-slate-800">
-                            Include in Cost Calculation
+                            Include in Cost
                           </span>
                         </label>
+
+                        {/* เลือกระดับคิดต้นทุน (ต่อหน่วยย่อย vs ต่อแพ็กขาย) ได้อิสระทันที */}
+                        {packMetrics.isMultiPack && (
+                          <div className="flex items-center gap-1 bg-indigo-50/80 border border-indigo-200 px-2.5 py-1 rounded-xl">
+                            <span className="text-[11px] font-bold text-indigo-900">
+                              คิดราคาต่อ:
+                            </span>
+                            <select
+                              disabled={isViewOnly}
+                              value={basis}
+                              onChange={(e) => {
+                                const newBasis = e.target.value as CostBasisLevel;
+                                const copy = project.packaging.map((x) =>
+                                  x.id === it.id ? { ...x, costBasis: newBasis } : x
+                                );
+                                updateImmediately({ packaging: copy });
+                              }}
+                              className="text-xs font-extrabold text-indigo-950 bg-transparent focus:outline-hidden cursor-pointer"
+                            >
+                              <option value="unit">
+                                หน่วยย่อย ({packMetrics.baseUnitName})
+                              </option>
+                              <option value="pack">
+                                แพ็กขาย ({packMetrics.packUnitName})
+                              </option>
+                            </select>
+                          </div>
+                        )}
 
                         <select
                           disabled={!canEdit(packagePanelId)}
                           value={it.type}
                           onChange={(e) => {
+                            const newType = e.target.value as any;
                             const copy = project.packaging.map((x) =>
                               x.id === it.id
-                                ? { ...x, type: e.target.value as any }
+                                ? {
+                                    ...x,
+                                    type: newType,
+                                    costBasis:
+                                      newType === 'Secondary Package' ? 'pack' : 'unit'as CostBasisLevel,
+                                  }
                                 : x
                             );
                             update({ packaging: copy });
@@ -2785,14 +2923,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         ) : (
                           <span className="text-sm font-extrabold text-slate-900">
                             {pkgPriceRes.has
-                              ? `${baht(pkgPriceRes.price * (it.vatIncluded ? 1 : 1 + VAT_RATE))} ฿ / pc`
+                              ? `${baht(pkgPriceRes.price * (it.vatIncluded ? 1 : 1 + VAT_RATE))} ฿ / ${basisUnitLabel}`
                               : 'Price not set'}
                           </span>
                         )}
 
                         {isBelowMoq && (
                           <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
-                            Below MOQ ({it.moq})
+                            ใช้จริง {basisQty.toLocaleString()} &lt; MOQ ({Number(it.moq).toLocaleString()} {basisUnitLabel})
                           </span>
                         )}
                       </div>
@@ -2863,7 +3001,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
-                          MOQ (Units)
+                          MOQ ({basisUnitLabel})
                         </label>
                         <input
                           type="number"
@@ -2992,12 +3130,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     </div>
                     </fieldset>
 
-                    {/* ส่วน Tiered Pricing Ladder กดเลือก Tier ราคาได้อิสระโดยไม่ต้องกด Edit */}
+                    {/* ส่วน Tiered Pricing Ladder กดเลือก Tier ราคาได้อิสระ */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
                         <div className="flex items-center justify-between flex-wrap gap-1">
                           <span className="text-xs font-bold text-slate-800">
-                            Tiered Pricing Ladder
+                            Tiered Pricing (ต่อ {basisUnitLabel})
                           </span>
                           <span className="text-[11px] font-medium text-teal-700">
                             (ติ๊กเลือก Tier ราคาที่ใช้คิดต้นทุนได้ทันที)
@@ -3014,8 +3152,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               <thead>
                                 <tr className="text-slate-500 font-bold border-b border-slate-200 text-[11px]">
                                   <th className="py-1 w-14 text-center">เลือกใช้</th>
-                                  <th className="py-1">From (Units)</th>
-                                  <th className="py-1">Price (THB/pc)</th>
+                                  <th className="py-1">From ({basisUnitLabel})</th>
+                                  <th className="py-1">Price (THB/{basisUnitLabel})</th>
                                   {canEdit(packagePanelId) && <th className="py-1 w-8"></th>}
                                 </tr>
                               </thead>
@@ -3294,7 +3432,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   Operating, Logistics & Incidental Expenses
                 </h3>
                 <p className="text-xs text-slate-500">
-                  หน่วย "ชิ้น" จะถูกหารเฉลี่ยรวมใน Total Unit Cost ส่วนหน่วย "ครั้ง / รอบ / เที่ยว / ล็อต" จะแยกแสดงที่ Additional Cost
+                  หน่วย "{packMetrics.baseUnitName}" และ "{packMetrics.packUnitName}" จะคำนวณเฉลี่ยเข้าต้นทุนต่อหน่วย/ต่อแพ็ก ส่วนหน่วย "ครั้ง / รอบ / เที่ยว / ล็อต" จะแยกแสดงที่ Additional Cost
                 </p>
               </div>
 
@@ -3308,7 +3446,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         {
                           id: uid(),
                           name: '',
-                          unit: 'ชิ้น',
+                          unit: packMetrics.baseUnitName,
                           amount: '',
                           perQty: 1,
                           note: '',
@@ -3336,8 +3474,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     <th className="py-2.5 px-3.5 min-w-[180px]">รายละเอียด (Description)</th>
                     <th className="py-2.5 px-3 w-40">ราคา (THB)</th>
                     <th className="py-2.5 px-3 w-28 text-center">ต่อจำนวน</th>
-                    <th className="py-2.5 px-3 w-32">หน่วยนับ</th>
-                    <th className="py-2.5 px-3 w-36 text-right">ผลรวม (รวม VAT)</th>
+                    <th className="py-2.5 px-3 w-36">หน่วยนับ</th>
+                    <th className="py-2.5 px-3 w-40 text-right">ผลรวม (รวม VAT)</th>
                     <th className="py-2.5 px-3 min-w-[150px]">Notes</th>
                     <th className="py-2.5 px-2 w-10 text-center"></th>
                   </tr>
@@ -3351,7 +3489,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     </tr>
                   ) : (
                     project.other.map((o, idx) => {
-                      const calc = calcOtherItemTotal(o);
+                      const calc = calcOtherItemTotal(
+                        o,
+                        packMetrics.unitsPerPack,
+                        packMetrics.packUnitName
+                      );
+                      const cat = classifyOtherCostUnit(o.unit, packMetrics.packUnitName);
                       const displayQty =
                         o.perQty !== undefined && o.perQty !== ''
                           ? o.perQty
@@ -3368,7 +3511,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 copy[idx] = { ...copy[idx], name: e.target.value };
                                 update({ other: copy });
                               }}
-                              placeholder="เช่น ค่าแพ็คกิ้ง / ค่าขนส่ง"
+                              placeholder="เช่น ค่าแพ็คลงห่อ / ค่าขนส่ง"
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
                             />
                           </td>
@@ -3433,7 +3576,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-center font-semibold"
                             />
                             <span className="block text-[10px] text-slate-400 text-center mt-1">
-                              {calc.isPerPiece ? 'ต่อกี่ชิ้น' : 'กี่ครั้ง/รอบ'}
+                              {cat === 'lumpsum' ? 'กี่ครั้ง/รอบ' : `ต่อกี่${o.unit || 'หน่วย'}`}
                             </span>
                           </td>
 
@@ -3447,15 +3590,23 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 copy[idx] = { ...copy[idx], unit: e.target.value };
                                 update({ other: copy });
                               }}
-                              placeholder="ชิ้น / ครั้ง"
+                              placeholder="ซอง / ห่อ / ครั้ง"
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-800"
                             />
                             <span
                               className={`block text-[10px] mt-1 font-semibold ${
-                                calc.isPerPiece ? 'text-emerald-600' : 'text-indigo-600'
+                                cat === 'lumpsum'
+                                  ? 'text-indigo-600'
+                                  : cat === 'pack'
+                                  ? 'text-teal-700'
+                                  : 'text-emerald-600'
                               }`}
                             >
-                              {calc.isPerPiece ? '→ รวมใน Unit Cost' : '→ Additional Cost'}
+                              {cat === 'lumpsum'
+                                ? '→ Additional Cost'
+                                : cat === 'pack'
+                                ? `→ คิดต่อ ${packMetrics.packUnitName}`
+                                : `→ คิดต่อ ${packMetrics.baseUnitName}`}
                             </span>
                           </td>
 
@@ -3466,13 +3617,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               <div>
                                 <span
                                   className={`font-extrabold text-xs sm:text-sm ${
-                                    calc.isPerPiece ? 'text-emerald-700' : 'text-indigo-700'
+                                    cat === 'lumpsum' ? 'text-indigo-700' : 'text-emerald-700'
                                   }`}
                                 >
                                   {baht(calc.value)} ฿
                                 </span>
                                 <span className="block text-[10px] text-slate-400">
-                                  {calc.isPerPiece ? 'ต่อชิ้น (เฉลี่ย)' : 'ยอดรวมทั้งก้อน'}
+                                  {cat === 'lumpsum'
+                                    ? 'ยอดรวมทั้งก้อน'
+                                    : cat === 'pack'
+                                    ? `ต่อ${packMetrics.packUnitName} (${baht(calc.perBaseUnit)} ฿/${packMetrics.baseUnitName})`
+                                    : `ต่อ${packMetrics.baseUnitName}`}
                                 </span>
                               </div>
                             )}
@@ -3516,14 +3671,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
 
             <datalist id="unit-suggestions">
+              <option value={packMetrics.baseUnitName} />
+              <option value={packMetrics.packUnitName} />
               <option value="ชิ้น" />
-              <option value="Piece" />
+              <option value="ซอง" />
+              <option value="ห่อ" />
+              <option value="กล่อง" />
+              <option value="กระปุก" />
               <option value="ครั้ง" />
               <option value="รอบ" />
               <option value="เที่ยว" />
               <option value="ล็อต" />
-              <option value="Trip" />
-              <option value="Lot" />
             </datalist>
           </section>
           </fieldset>

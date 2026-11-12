@@ -16,6 +16,8 @@ export interface AppUser {
   createdAt: number;
 }
 
+export type CostBasisLevel = 'unit' | 'pack';
+
 export interface Formula {
   id: string;
   ver: string;
@@ -48,6 +50,7 @@ export interface PackagingItem {
   moq: string | number;
   steps: StepPrice[];
   selectedStepIdx?: number | null;
+  costBasis?: CostBasisLevel; // 'unit' = ต่อหน่วยย่อย (ซอง/เม็ด), 'pack' = ต่อแพ็กขาย (ห่อ/กระปุก)
   note: string;
   images?: string[];
   plateCost?: string | number;
@@ -147,7 +150,10 @@ export interface Project {
   factory: string;
   startDate: string;
   launchTarget: string;
-  qty: string | number;
+  qty: string | number; // จำนวนหน่วยย่อยทั้งหมด (เช่น 30,000 ซอง)
+  baseUnitName?: string; // ชื่อหน่วยย่อย (เช่น ซอง, เม็ด, ชิ้น)
+  packUnitName?: string; // ชื่อแพ็กขาย (เช่น ห่อ, กล่อง, กระปุก)
+  unitsPerPack?: string | number; // อัตราบรรจุต่อแพ็ก (เช่น 7 ซอง/ห่อ, 30 เม็ด/กระปุก)
   pack: string;
   packNote: string;
   benefit: string;
@@ -180,19 +186,27 @@ export interface TaskComputeResult {
 }
 
 export interface CostSummaryResult {
-  q: number;
+  q: number; // จำนวนหน่วยย่อยทั้งหมด
+  unitsPerPack: number; // อัตราบรรจุต่อแพ็ก (เช่น 7)
+  fullPacks: number; // จำนวนแพ็กเต็มที่ขายได้จริง (Math.floor)
+  remainderUnits: number; // จำนวนเศษคงเหลือ (%)
+  baseUnitName: string;
+  packUnitName: string;
   f: Formula;
-  fp: number;
+  fp: number; // ค่าสูตรต่อหน่วยย่อย (รวม VAT)
   fhas: boolean;
-  pk: number;
-  ot: number;
-  additionalCost: number;
+  pk: number; // ค่าบรรจุภัณฑ์รวมเฉลี่ยต่อหน่วยย่อย (รวม VAT)
+  ot: number; // ค่าใช้จ่ายอื่นๆ เฉลี่ยต่อหน่วยย่อย (รวม VAT)
+  additionalCost: number; // ค่าใช้จ่ายเหมาต่อครั้ง/รอบ
   subtotal: number;
   vat: number;
   plateTotal: number;
   platePerUnit: number;
-  unit: number;
-  batch: number;
+  unit: number; // ต้นทุนต่อหน่วยย่อย (ซอง/เม็ด) รวม VAT
+  packCost: number; // ต้นทุนต่อ 1 แพ็กขายจริง (ห่อ/กระปุก) รวม VAT
+  sellableBatchCost: number; // ต้นทุนรวมเฉพาะแพ็กเต็มที่ขายได้จริง
+  remainderCost: number; // มูลค่าต้นทุนของเศษคงเหลือ
+  batch: number; // ต้นทุนรวมทั้งหมดทั้งล็อต
   below: string[];
 }
 

@@ -9,7 +9,6 @@ import {
   ProjectCategory,
   ProjectStatus,
   ProjectSummaryResult,
-  RegulatoryItem,
   StepPrice,
   Task,
   TaskComputeResult,
@@ -44,7 +43,9 @@ export const CATEGORIES_LIST: ProjectCategory[] = [
   'Skincare',
 ];
 
-export const displayStatus = (s: string | undefined): 'In Progress' | 'On Hold' | 'Completed' | 'Cancelled' => {
+export const displayStatus = (
+  s: string | undefined
+): 'In Progress' | 'On Hold' | 'Completed' | 'Cancelled' => {
   if (!s) return 'In Progress';
   if (s === 'เสร็จสิ้น' || s === 'Completed') return 'Completed';
   if (s === 'พักไว้' || s === 'On Hold') return 'On Hold';
@@ -52,7 +53,9 @@ export const displayStatus = (s: string | undefined): 'In Progress' | 'On Hold' 
   return 'In Progress';
 };
 
-export const displayCategory = (c: string | undefined): 'Dietary Supplement' | 'Skincare' => {
+export const displayCategory = (
+  c: string | undefined
+): 'Dietary Supplement' | 'Skincare' => {
   if (c === 'สกินแคร์' || c === 'Skincare') return 'Skincare';
   return 'Dietary Supplement';
 };
@@ -91,10 +94,12 @@ export const DOC_TYPES = [
 
 export const DEFAULT_UNITS = [
   'ชิ้น',
+  'ซอง',
+  'ห่อ',
+  'กล่อง',
+  'กระปุก',
   'เที่ยว',
   'ล็อต',
-  'กิโลกรัม',
-  'ลัง',
   'ครั้ง',
 ] as const;
 
@@ -221,7 +226,7 @@ export function makeTimeline(cat: string): Phase[] {
     start: '',
     done: false,
   });
-  const skin = cat === 'สกินแคร์';
+  const skin = cat === 'สกินแคร์' || cat === 'Skincare';
   const f1 = T('ปรับสูตรและทำตัวอย่างรอบแรก', 10, '@start');
   const f2 = T('ทดสอบตัวอย่างและปรับสูตร', 10, '');
   const f3 = T('อนุมัติสูตรสุดท้าย', 2, '');
@@ -275,6 +280,7 @@ export function makeTimeline(cat: string): Phase[] {
 export function makeProject(cat?: 'อาหารเสริม' | 'สกินแคร์'): Project {
   const fid = uid();
   const selectedCat = cat || 'อาหารเสริม';
+  const isSkin = selectedCat === 'สกินแคร์';
   return {
     id: uid(),
     name: '',
@@ -287,6 +293,9 @@ export function makeProject(cat?: 'อาหารเสริม' | 'สกิ�
     startDate: todayISO(),
     launchTarget: '',
     qty: '',
+    baseUnitName: isSkin ? 'ชิ้น' : 'ซอง',
+    packUnitName: isSkin ? 'กล่อง' : 'ห่อ',
+    unitsPerPack: 1,
     pack: '',
     packNote: '',
     benefit: '',
@@ -328,6 +337,13 @@ export function makeProject(cat?: 'อาหารเสริม' | 'สกิ�
 export function norm(p: Project): Project {
   p.category = displayCategory(p.category);
   p.status = displayStatus(p.status);
+  const isSkin = p.category === 'Skincare';
+  p.baseUnitName = p.baseUnitName || (isSkin ? 'ชิ้น' : 'ซอง');
+  p.packUnitName = p.packUnitName || (isSkin ? 'กล่อง' : 'ห่อ');
+  if (p.unitsPerPack === undefined || p.unitsPerPack === '') {
+    p.unitsPerPack = 1;
+  }
+
   p.ingredients = p.ingredients || [];
   p.tests = p.tests || [];
   p.regulatory = p.regulatory || [];
@@ -358,6 +374,9 @@ export function norm(p: Project): Project {
     x.steps = x.steps && x.steps.length ? x.steps : [{ qty: '', price: '' }];
     if (x.selectedForCost === undefined) x.selectedForCost = true;
     if (!x.status) x.status = 'Not Started';
+    if (!x.costBasis) {
+      x.costBasis = x.type === 'Secondary Package' ? 'pack' : 'unit';
+    }
     if (!x.images) {
       x.images = (x as any).imageUrl ? [(x as any).imageUrl] : [];
     }
@@ -375,6 +394,35 @@ export function norm(p: Project): Project {
   });
   p.startDate = p.startDate || todayISO();
   return p;
+}
+
+export function getPackMetrics(p: Project): {
+  totalUnits: number;
+  unitsPerPack: number;
+  fullPacks: number;
+  remainderUnits: number;
+  baseUnitName: string;
+  packUnitName: string;
+  isMultiPack: boolean;
+} {
+  const totalUnits = Math.max(0, Number(p.qty) || 0);
+  const rawRatio = Number(p.unitsPerPack);
+  const unitsPerPack = rawRatio >= 1 ? Math.floor(rawRatio) : 1;
+  const fullPacks = unitsPerPack > 0 ? Math.floor(totalUnits / unitsPerPack) : totalUnits;
+  const remainderUnits = unitsPerPack > 1 ? totalUnits % unitsPerPack : 0;
+  const isSkin = displayCategory(p.category) === 'Skincare';
+  const baseUnitName = (p.baseUnitName || (isSkin ? 'ชิ้น' : 'ซอง')).trim();
+  const packUnitName = (p.packUnitName || (isSkin ? 'กล่อง' : 'ห่อ')).trim();
+
+  return {
+    totalUnits,
+    unitsPerPack,
+    fullPacks,
+    remainderUnits,
+    baseUnitName,
+    packUnitName,
+    isMultiPack: unitsPerPack > 1,
+  };
 }
 
 export function flatTasks(p: Project): Task[] {
@@ -446,7 +494,7 @@ export function lookup(
 
 export function resolvePackagingPrice(
   it: PackagingItem,
-  q: number
+  basisQty: number
 ): { price: number; has: boolean; selectedIdx: number | null } {
   const steps = it.steps || [];
   if (
@@ -465,7 +513,7 @@ export function resolvePackagingPrice(
     }
   }
 
-  const auto = lookup(steps, q);
+  const auto = lookup(steps, basisQty);
   let matchedIdx: number | null = null;
   if (auto.has && auto.step !== undefined) {
     const found = steps.findIndex(
@@ -538,30 +586,67 @@ export function depOpts(
   return o;
 }
 
-export function isPerPieceUnit(unit: string): boolean {
+export type OtherCostCategory = 'unit' | 'pack' | 'lumpsum';
+
+export function classifyOtherCostUnit(unit: string, packUnitName?: string): OtherCostCategory {
   const u = (unit || '').trim().toLowerCase();
-  return ['ชิ้น', 'piece', 'pc', 'pcs', 'ซอง', 'กล่อง', 'ขวด', 'กระปุก', 'หลอด', 'แคปซูล', 'เม็ด'].includes(u);
+  const packName = (packUnitName || '').trim().toLowerCase();
+  if (
+    (packName && u === packName) ||
+    ['ห่อ', 'แพ็ก', 'แพ็ค', 'กล่อง', 'กระปุก', 'pack', 'box', 'jar', 'carton', 'ลัง'].includes(u)
+  ) {
+    return 'pack';
+  }
+  if (
+    ['ชิ้น', 'ซอง', 'เม็ด', 'แคปซูล', 'ขวด', 'หลอด', 'piece', 'pc', 'pcs', 'sachet', 'unit'].includes(u)
+  ) {
+    return 'unit';
+  }
+  return 'lumpsum';
+}
+
+export function isPerPieceUnit(unit: string, packUnitName?: string): boolean {
+  const cat = classifyOtherCostUnit(unit, packUnitName);
+  return cat === 'unit' || cat === 'pack';
 }
 
 export function calcOtherItemTotal(
-  o: { amount: string | number; unit: string; perQty?: string | number; times?: string | number; vatIncluded?: boolean }
-): { value: number; isPerPiece: boolean; perQtyVal: number } {
+  o: { amount: string | number; unit: string; perQty?: string | number; times?: string | number; vatIncluded?: boolean },
+  unitsPerPack = 1,
+  packUnitName?: string
+): { value: number; perBaseUnit: number; perPack: number; category: OtherCostCategory; perQtyVal: number } {
   const price = Number(o.amount) || 0;
   const rawQty = o.perQty !== undefined && o.perQty !== '' ? Number(o.perQty) : Number(o.times);
   const perQtyVal = rawQty > 0 ? rawQty : 1;
   const vatMult = o.vatIncluded ? 1 : 1 + VAT_RATE;
-  const perPiece = isPerPieceUnit(o.unit);
+  const category = classifyOtherCostUnit(o.unit, packUnitName);
+  const ratio = unitsPerPack >= 1 ? unitsPerPack : 1;
 
-  if (perPiece) {
+  if (category === 'unit') {
+    const val = (price / perQtyVal) * vatMult;
     return {
-      value: (price / perQtyVal) * vatMult,
-      isPerPiece: true,
+      value: val,
+      perBaseUnit: val,
+      perPack: val * ratio,
+      category,
+      perQtyVal,
+    };
+  } else if (category === 'pack') {
+    const val = (price / perQtyVal) * vatMult;
+    return {
+      value: val,
+      perBaseUnit: val / ratio,
+      perPack: val,
+      category,
       perQtyVal,
     };
   } else {
+    const val = price * perQtyVal * vatMult;
     return {
-      value: price * perQtyVal * vatMult,
-      isPerPiece: false,
+      value: val,
+      perBaseUnit: 0,
+      perPack: 0,
+      category,
       perQtyVal,
     };
   }
@@ -569,26 +654,35 @@ export function calcOtherItemTotal(
 
 export function otherPer(
   o: { amount: string | number; unit: string; perQty?: string | number; times?: string | number },
-  _q: number
+  _q: number,
+  unitsPerPack = 1,
+  packUnitName?: string
 ): number {
   const price = Number(o.amount) || 0;
   const rawQty = o.perQty !== undefined && o.perQty !== '' ? Number(o.perQty) : Number(o.times);
   const perQtyVal = rawQty > 0 ? rawQty : 1;
+  const category = classifyOtherCostUnit(o.unit, packUnitName);
+  const ratio = unitsPerPack >= 1 ? unitsPerPack : 1;
 
-  if (isPerPieceUnit(o.unit)) {
-    return price / perQtyVal;
-  }
+  if (category === 'unit') return price / perQtyVal;
+  if (category === 'pack') return (price / perQtyVal) / ratio;
   return 0;
 }
 
 export function costOf(p: Project): CostSummaryResult {
-  const q = Number(p.qty) || 0;
+  const metrics = getPackMetrics(p);
+  const q = metrics.totalUnits;
+  const ratio = metrics.unitsPerPack;
+  const fullPacks = metrics.fullPacks;
+  const remainderUnits = metrics.remainderUnits;
+
   const f =
     p.formulas.find((x) => x.id === p.chosenFormula) ||
     p.formulas[p.formulas.length - 1];
   const fr = resolveFormulaPrice(f, q);
-  let packagingSubtotal = 0;
-  let packagingVat = 0;
+
+  let packagingSubtotalPerUnit = 0;
+  let packagingVatPerUnit = 0;
   let otherUnitSubtotal = 0;
   let otherUnitVat = 0;
   let additionalCost = 0;
@@ -598,30 +692,56 @@ export function costOf(p: Project): CostSummaryResult {
   const activePackaging = p.packaging.filter((it) => it.selectedForCost !== false);
 
   activePackaging.forEach((it) => {
-    const r = resolvePackagingPrice(it, q);
-    packagingSubtotal += r.price;
-    if (it.plateCost && Number(it.plateCost) > 0) {
-      plateTotal += Number(it.plateCost);
+    const basis: 'unit' | 'pack' =
+      it.costBasis || (it.type === 'Secondary Package' ? 'pack' : 'unit');
+    const basisQty = basis === 'pack' ? fullPacks : q;
+    const r = resolvePackagingPrice(it, basisQty);
+
+    const rawPlate = Number(it.plateCost) || 0;
+    if (rawPlate > 0) {
+      plateTotal += rawPlate;
     }
-    const platePerItem = q > 0 ? (Number(it.plateCost) || 0) / q : 0;
-    if (!it.vatIncluded) {
-      packagingVat += (r.price + platePerItem) * VAT_RATE;
-    }
-    if (q && Number(it.moq) && q < Number(it.moq)) {
-      below.push(it.name || '(ไม่มีชื่อ)');
+
+    if (basis === 'pack') {
+      // บรรจุภัณฑ์ระดับแพ็ก (เช่น ถุงซิปล็อกนอก / กล่อง / กระปุก)
+      const pkgBasePerUnit = ratio > 0 ? r.price / ratio : r.price;
+      const plateBasePerUnit = fullPacks > 0 ? rawPlate / (fullPacks * ratio) : 0;
+      packagingSubtotalPerUnit += pkgBasePerUnit;
+      if (!it.vatIncluded) {
+        packagingVatPerUnit += (pkgBasePerUnit + plateBasePerUnit) * VAT_RATE;
+      }
+      if (fullPacks > 0 && Number(it.moq) && fullPacks < Number(it.moq)) {
+        below.push(`${it.name || '(ไม่มีชื่อ)'} (ใช้ ${fullPacks.toLocaleString()} ${metrics.packUnitName} < MOQ ${Number(it.moq).toLocaleString()})`);
+      }
+    } else {
+      // บรรจุภัณฑ์ระดับหน่วยย่อย (เช่น ซองย่อย / เม็ด / แคปซูล)
+      const plateBasePerUnit = q > 0 ? rawPlate / q : 0;
+      packagingSubtotalPerUnit += r.price;
+      if (!it.vatIncluded) {
+        packagingVatPerUnit += (r.price + plateBasePerUnit) * VAT_RATE;
+      }
+      if (q > 0 && Number(it.moq) && q < Number(it.moq)) {
+        below.push(`${it.name || '(ไม่มีชื่อ)'} (ใช้ ${q.toLocaleString()} ${metrics.baseUnitName} < MOQ ${Number(it.moq).toLocaleString()})`);
+      }
     }
   });
 
+  // เฉลี่ยค่าบล็อก/แม่พิมพ์รวมเข้าต่อหน่วยย่อย
   const platePerUnit = q > 0 ? plateTotal / q : 0;
-  packagingSubtotal += platePerUnit;
+  packagingSubtotalPerUnit += platePerUnit;
 
   p.other.forEach((o) => {
     const price = Number(o.amount) || 0;
     const rawQty = o.perQty !== undefined && o.perQty !== '' ? Number(o.perQty) : Number(o.times);
     const perQtyVal = rawQty > 0 ? rawQty : 1;
+    const category = classifyOtherCostUnit(o.unit, metrics.packUnitName);
 
-    if (isPerPieceUnit(o.unit)) {
+    if (category === 'unit') {
       const unitBase = price / perQtyVal;
+      otherUnitSubtotal += unitBase;
+      if (!o.vatIncluded) otherUnitVat += unitBase * VAT_RATE;
+    } else if (category === 'pack') {
+      const unitBase = (price / perQtyVal) / ratio;
       otherUnitSubtotal += unitBase;
       if (!o.vatIncluded) otherUnitVat += unitBase * VAT_RATE;
     } else {
@@ -631,15 +751,25 @@ export function costOf(p: Project): CostSummaryResult {
   });
 
   const formulaVat = f.vatIncluded ? 0 : fr.price * VAT_RATE;
-  const subtotal = fr.price + packagingSubtotal + otherUnitSubtotal;
-  const vat = formulaVat + packagingVat + otherUnitVat;
+  const subtotal = fr.price + packagingSubtotalPerUnit + otherUnitSubtotal;
+  const vat = formulaVat + packagingVatPerUnit + otherUnitVat;
   const fp = fr.price + formulaVat;
-  const pk = packagingSubtotal + packagingVat;
+  const pk = packagingSubtotalPerUnit + packagingVatPerUnit;
   const ot = otherUnitSubtotal + otherUnitVat;
-  const unit = subtotal + vat;
+
+  const unit = subtotal + vat; // ต้นทุนต่อ 1 หน่วยย่อย (ซอง/เม็ด) รวม VAT
+  const packCost = unit * ratio; // ต้นทุนต่อ 1 แพ็กขายจริง (ห่อ/กระปุก) รวม VAT
+  const sellableBatchCost = packCost * fullPacks; // ต้นทุนรวมของแพ็กขายเต็มทั้งหมด
+  const remainderCost = unit * remainderUnits; // มูลค่าของเศษคงเหลือ
+  const batch = unit * q + additionalCost;
 
   return {
     q,
+    unitsPerPack: ratio,
+    fullPacks,
+    remainderUnits,
+    baseUnitName: metrics.baseUnitName,
+    packUnitName: metrics.packUnitName,
     f,
     fp,
     fhas: fr.has,
@@ -651,7 +781,10 @@ export function costOf(p: Project): CostSummaryResult {
     plateTotal,
     platePerUnit,
     unit,
-    batch: unit * q + additionalCost,
+    packCost,
+    sellableBatchCost,
+    remainderCost,
+    batch,
     below,
   };
 }
