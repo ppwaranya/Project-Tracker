@@ -3788,7 +3788,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
             <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 font-heading">
-              <span className="min-w-0 flex-1">Weekly Gantt Chart</span>
+              <span className="min-w-0 flex-1">Timeline Gantt Chart</span>
               {panelToggle('timeline-gantt')}
             </h3>
             <div hidden={collapsedPanels.has('timeline-gantt')}>
@@ -3802,11 +3802,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-base font-bold text-slate-900 font-heading">
-                  Phased Task Schedule
+                  Task Schedule
                 </h3>
-                <p className="text-xs text-slate-500">
-                  Modifying working days or dependencies dynamically reschedules downstream phases
-                </p>
+                
               </div>
               <div className="ml-auto flex items-center gap-2">
                 {panelActions('timeline-schedule')}
