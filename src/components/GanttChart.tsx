@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Project, TaskComputeResult } from '../lib/types';
 import {
   flatTasks,
@@ -11,7 +11,15 @@ import {
   TM,
   PHASE_NAMES_EN,
 } from '../lib/trackerLogic';
-import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+} from 'lucide-react';
 
 interface GanttChartProps {
   project: Project;
@@ -24,6 +32,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
 }) => {
   const [collapsedPhases, setCollapsedPhases] = useState<Set<number>>(new Set());
   const [isMobile, setIsMobile] = useState(false);
+  const [zoomScale, setZoomScale] = useState<number>(1);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -70,9 +80,12 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     m = addD(m, 7);
   }
 
-  // ปรับความกว้างคอลัมน์อัตโนมัติตามขนาดจอ
-  const CW = isMobile ? 44 : 52; 
-  const NW = isMobile ? 150 : 250; 
+  // ความกว้างพื้นฐานและคำนวณตามระดับการซูม
+  const baseCW = isMobile ? 44 : 52;
+  const CW = Math.max(12, Math.round(baseCW * zoomScale));
+  const NW = isMobile ? 140 : zoomScale < 0.65 ? 190 : 250;
+  const isCompact = CW < 32;
+
   const n = weeks.length;
   const w0 = pd(weeks[0]).getTime();
 
@@ -124,6 +137,23 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     );
   };
 
+  const handleZoomOut = () => {
+    setZoomScale((prev) => Math.max(0.25, Number((prev - 0.15).toFixed(2))));
+  };
+
+  const handleZoomIn = () => {
+    setZoomScale((prev) => Math.min(1.6, Number((prev + 0.15).toFixed(2))));
+  };
+
+  const handleFitAll = () => {
+    const containerWidth = containerRef.current?.clientWidth || (isMobile ? 360 : 1000);
+    const nameColWidth = isMobile ? 140 : 190;
+    const availableForWeeks = Math.max(120, containerWidth - nameColWidth - 4);
+    const idealCW = availableForWeeks / Math.max(1, n);
+    const idealScale = Math.max(0.25, Math.min(1, Number((idealCW / baseCW).toFixed(2))));
+    setZoomScale(idealScale);
+  };
+
   return (
     <div className="space-y-3">
       {/* Controls */}
@@ -133,10 +163,50 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             Weekly Timeline & Milestones
           </span>
           <span className="text-[11px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md font-medium">
-            เลื่อนซ้าย-ขวา เพื่อดูไทม์ไลน์
+            {n} สัปดาห์ · เลื่อนซ้าย-ขวา หรือกด +/- เพื่อย่อขยาย
           </span>
         </div>
-        <div className="flex items-center gap-2 self-end sm:self-auto">
+
+        <div className="flex items-center gap-2 flex-wrap self-end sm:self-auto">
+          {/* แถบปุ่มย่อ/ขยายตาราง (- / % / + / Fit) */}
+          <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden">
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              disabled={zoomScale <= 0.25}
+              title="ย่อตาราง (Zoom Out)"
+              className="px-2 py-1 text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition-colors cursor-pointer"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomScale(1)}
+              title="รีเซ็ตขนาด 100%"
+              className="px-2 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50 border-x border-slate-200 min-w-[46px] text-center tabular-nums cursor-pointer"
+            >
+              {Math.round(zoomScale * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              disabled={zoomScale >= 1.6}
+              title="ขยายตาราง (Zoom In)"
+              className="px-2 py-1 text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition-colors cursor-pointer"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleFitAll}
+              title="ย่อให้เห็นทั้งหมดพอดีหน้าจอ"
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-teal-700 bg-teal-50/70 hover:bg-teal-100 border-l border-slate-200 transition-colors cursor-pointer"
+            >
+              <Maximize2 className="w-3 h-3" />
+              <span>Fit</span>
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={toggleAllPhases}
@@ -153,7 +223,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
       </div>
 
       {/* กรอบตารางแบบ Scroll ทั้งแนวนอนและแนวตั้ง */}
-      <div className="overflow-auto max-h-[65vh] sm:max-h-[72vh] border border-slate-200 rounded-2xl bg-white shadow-2xs max-w-full touch-pan-x">
+      <div
+        ref={containerRef}
+        className="overflow-auto max-h-[65vh] sm:max-h-[72vh] border border-slate-200 rounded-2xl bg-white shadow-2xs max-w-full touch-pan-x"
+      >
         <table
           className="border-separate border-spacing-0 table-fixed bg-white text-xs select-none"
           style={{ width: `${NW + n * CW}px` }}
@@ -179,13 +252,15 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 const a = x.k.split('-').map(Number);
                 const monthName = TM[a[1] - 1] || '';
                 const yearCe = a[0];
+                const isNarrowMonth = x.n * CW < 65;
                 return (
                   <th
                     key={idx}
                     colSpan={x.n}
-                    className="px-1.5 py-1 text-center font-bold text-slate-800 border-l border-b border-slate-200 bg-slate-100 tracking-wide text-xs"
+                    title={`${monthName} ${yearCe}`}
+                    className="px-1 py-1 text-center font-bold text-slate-800 border-l border-b border-slate-200 bg-slate-100 tracking-wide text-[11px] sm:text-xs truncate"
                   >
-                    {monthName} {yearCe}
+                    {isNarrowMonth ? `${monthName} '${String(yearCe).slice(-2)}` : `${monthName} ${yearCe}`}
                   </th>
                 );
               })}
@@ -198,13 +273,21 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 return (
                   <th
                     key={idx}
-                    title={`Week starting ${fmt(w)}`}
-                    className="py-1 text-center font-semibold text-slate-600 border-l border-b border-slate-200 bg-slate-50 text-[10px] sm:text-[11px] leading-tight"
+                    title={`Week ${weekNum} (${fmt(w)})`}
+                    className="py-1 text-center font-semibold text-slate-600 border-l border-b border-slate-200 bg-slate-50 text-[9px] sm:text-[11px] leading-tight overflow-hidden"
                   >
-                    <span className="text-[9px] text-slate-400 block font-normal">
-                      W{weekNum}
-                    </span>
-                    <span>{dayNum}</span>
+                    {isCompact ? (
+                      <span className="text-[9px] text-slate-500 font-medium">
+                        {weekNum}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-[9px] text-slate-400 block font-normal">
+                          W{weekNum}
+                        </span>
+                        <span>{dayNum}</span>
+                      </>
+                    )}
                   </th>
                 );
               })}
@@ -234,7 +317,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 const l = (wi(ps) + di(ps) / 5) * CW;
                 const r = (wi(pe) + (di(pe) + 1) / 5) * CW;
                 phaseBarLeft = Math.round(l);
-                phaseBarWidth = Math.max(6, Math.round(r - l));
+                phaseBarWidth = Math.max(4, Math.round(r - l));
               }
 
               const color = phaseColors[ph.k] || '#475569';
@@ -299,9 +382,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                           }}
                           title={`${PHASE_NAMES_EN[ph.k] || ph.name}: ${fmt(ps)} – ${fmt(pe)}`}
                         >
-                          <span className="truncate hidden sm:inline">
-                            {PHASE_NAMES_EN[ph.k] || ph.name}
-                          </span>
+                          {phaseBarWidth > 45 && (
+                            <span className="truncate hidden sm:inline">
+                              {PHASE_NAMES_EN[ph.k] || ph.name}
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>
@@ -316,7 +401,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                       const l = (wi(r.s) + di(r.s) / 5) * CW;
                       const right = (wi(r.e) + (di(r.e) + 1) / 5) * CW;
                       const barLeft = Math.round(l);
-                      const barWidth = Math.max(8, Math.round(right - l));
+                      const barWidth = Math.max(5, Math.round(right - l));
 
                       return (
                         <tr
@@ -380,7 +465,9 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                                 t.done ? '(Completed)' : ''
                               }`}
                             >
-                              <span className="truncate">{t.days}d</span>
+                              {barWidth >= 22 && (
+                                <span className="truncate">{t.days}d</span>
+                              )}
                             </div>
                           </td>
                         </tr>
