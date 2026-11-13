@@ -135,10 +135,14 @@ export const PnLTab: React.FC<PnLTabProps> = ({
       <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-extrabold text-slate-800">{title}</span>
-            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${badgeColor}`}>
-              {costPrivacy ? '••••••' : `${baht(subtotal)} ฿`}
-            </span>
+            {title && (
+              <>
+                <span className="text-xs font-extrabold text-slate-800">{title}</span>
+                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${badgeColor}`}>
+                  {costPrivacy ? '••••••' : `${baht(subtotal)} ฿`}
+                </span>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -506,7 +510,7 @@ export const PnLTab: React.FC<PnLTabProps> = ({
               </b>
             </div>
             {renderSubTable(
-              'รายการ Fixed Cost & Administrative Expenses',
+              '',
               'fixedCostItems',
               fixedCostTotal
             )}
@@ -523,7 +527,7 @@ export const PnLTab: React.FC<PnLTabProps> = ({
               </b>
             </div>
             {renderSubTable(
-              'รายการ Other Expense',
+              '',
               'otherExpenseItems',
               otherExpenseTotal
             )}
