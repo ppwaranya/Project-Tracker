@@ -179,6 +179,7 @@ export interface PnLLineItem {
   id: string;
   description: string;
   amount: string | number;
+  note?: string;
 }
 
 export interface ProjectPnL {
