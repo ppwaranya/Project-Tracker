@@ -172,6 +172,23 @@ export interface Project {
   createdAt: number;
   updatedAt?: number;
   rev: number;
+  pnl?: ProjectPnL;
+}
+
+export interface PnLLineItem {
+  id: string;
+  description: string;
+  amount: string | number;
+}
+
+export interface ProjectPnL {
+  grossSale: string | number;
+  distributionFee: string | number;
+  atlItems: PnLLineItem[];
+  btlItems: PnLLineItem[];
+  otherMktItems: PnLLineItem[];
+  fixedCostItems: PnLLineItem[];
+  otherExpenseItems: PnLLineItem[];
 }
 
 export interface Holiday {
