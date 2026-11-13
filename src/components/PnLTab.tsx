@@ -159,19 +159,21 @@ export const PnLTab: React.FC<PnLTabProps> = ({
               <span>Add</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => toggleSubTable(field)}
-              title={isSubCollapsed ? 'ขยายรายการ' : 'ยุบรายการ'}
-              aria-expanded={!isSubCollapsed}
-              className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              {isSubCollapsed ? (
-                <ChevronRight className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-            </button>
+            {title && (
+              <button
+                type="button"
+                onClick={() => toggleSubTable(field)}
+                title={isSubCollapsed ? 'ขยายรายการ' : 'ยุบรายการ'}
+                aria-expanded={!isSubCollapsed}
+                className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                {isSubCollapsed ? (
+                  <ChevronRight className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </button>
+            )}
           </div>
         </div>
 
@@ -500,37 +502,85 @@ export const PnLTab: React.FC<PnLTabProps> = ({
           </div>
 
           {/* 6. Fixed Cost & Administrative Expenses */}
-          <div className="rounded-2xl border border-slate-200 p-5 space-y-3 bg-white">
-            <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="rounded-2xl border border-slate-200 p-5 space-y-4 bg-white">
+            <div
+              className={`flex items-center justify-between flex-wrap gap-2 ${
+                collapsedSubTables.has('fixedCostSection')
+                  ? ''
+                  : 'pb-2 border-b border-slate-100'
+              }`}
+            >
               <h4 className="text-sm font-extrabold text-slate-900">
                 6. Fixed Cost & Administrative Expenses
               </h4>
-              <b className="text-sm font-black text-slate-900 tabular-nums">
-                {costPrivacy ? '••••••' : `${baht(fixedCostTotal)} ฿`}
-              </b>
+              <div className="flex items-center gap-3">
+                <b className="text-base font-black text-slate-900 tabular-nums">
+                  {costPrivacy ? '••••••' : `${baht(fixedCostTotal)} ฿`}
+                </b>
+                <button
+                  type="button"
+                  onClick={() => toggleSubTable('fixedCostSection')}
+                  title={
+                    collapsedSubTables.has('fixedCostSection')
+                      ? 'ขยายหมวด 6. Fixed Cost & Administrative Expenses'
+                      : 'ยุบหมวด 6. Fixed Cost & Administrative Expenses'
+                  }
+                  aria-expanded={!collapsedSubTables.has('fixedCostSection')}
+                  className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  {collapsedSubTables.has('fixedCostSection') ? (
+                    <ChevronRight className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
-            {renderSubTable(
-              '',
-              'fixedCostItems',
-              fixedCostTotal
-            )}
+
+            <div hidden={collapsedSubTables.has('fixedCostSection')}>
+              {renderSubTable('', 'fixedCostItems', fixedCostTotal)}
+            </div>
           </div>
 
           {/* 7. Other Expense */}
-          <div className="rounded-2xl border border-slate-200 p-5 space-y-3 bg-white">
-            <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="rounded-2xl border border-slate-200 p-5 space-y-4 bg-white">
+            <div
+              className={`flex items-center justify-between flex-wrap gap-2 ${
+                collapsedSubTables.has('otherExpenseSection')
+                  ? ''
+                  : 'pb-2 border-b border-slate-100'
+              }`}
+            >
               <h4 className="text-sm font-extrabold text-slate-900">
                 7. Other Expense
               </h4>
-              <b className="text-sm font-black text-slate-900 tabular-nums">
-                {costPrivacy ? '••••••' : `${baht(otherExpenseTotal)} ฿`}
-              </b>
+              <div className="flex items-center gap-3">
+                <b className="text-base font-black text-slate-900 tabular-nums">
+                  {costPrivacy ? '••••••' : `${baht(otherExpenseTotal)} ฿`}
+                </b>
+                <button
+                  type="button"
+                  onClick={() => toggleSubTable('otherExpenseSection')}
+                  title={
+                    collapsedSubTables.has('otherExpenseSection')
+                      ? 'ขยายหมวด 7. Other Expense'
+                      : 'ยุบหมวด 7. Other Expense'
+                  }
+                  aria-expanded={!collapsedSubTables.has('otherExpenseSection')}
+                  className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  {collapsedSubTables.has('otherExpenseSection') ? (
+                    <ChevronRight className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
-            {renderSubTable(
-              '',
-              'otherExpenseItems',
-              otherExpenseTotal
-            )}
+
+            <div hidden={collapsedSubTables.has('otherExpenseSection')}>
+              {renderSubTable('', 'otherExpenseItems', otherExpenseTotal)}
+            </div>
           </div>
 
           {/* 8. Net Contribution Summary Footer */}
