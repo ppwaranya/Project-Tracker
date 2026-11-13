@@ -418,7 +418,7 @@ export const PnLTab: React.FC<PnLTabProps> = ({
                   <td className="py-3 px-4">
                     <span>4. COGS</span>
                     <span className="block text-[11px] font-medium text-amber-800/80">
-                      ดึงยอดอัตโนมัติจาก Total Batch Cost
+                      ดึงยอดจาก Total Batch Cost
                     </span>
                   </td>
                   <td className="py-3 px-4 text-right tabular-nums font-extrabold">
@@ -449,9 +449,6 @@ export const PnLTab: React.FC<PnLTabProps> = ({
 
               <div className="flex items-center gap-2.5 flex-wrap">
                 <div className="text-right mr-1">
-                  <span className="text-[11px] font-bold text-slate-400 block">
-                    Total Net A&P
-                  </span>
                   <b className="text-base font-black text-indigo-900 tabular-nums">
                     {costPrivacy ? '••••••' : `${baht(netApTotal)} ฿`}
                   </b>
