@@ -50,22 +50,6 @@ export const PnLTab: React.FC<PnLTabProps> = ({
     | 'fixedCostItems'
     | 'otherExpenseItems';
 
-  const netApFields: ListField[] = ['atlItems', 'btlItems', 'otherMktItems'];
-  const areAllNetApSubCollapsed = netApFields.every((f) =>
-    collapsedSubTables.has(f)
-  );
-
-  const toggleAllNetApSubTables = () => {
-    setCollapsedSubTables((prev) => {
-      const next = new Set(prev);
-      if (areAllNetApSubCollapsed) {
-        netApFields.forEach((f) => next.delete(f));
-      } else {
-        netApFields.forEach((f) => next.add(f));
-      }
-      return next;
-    });
-  };
 
   const pnl: ProjectPnL = {
     ...DEFAULT_PNL,
@@ -467,27 +451,6 @@ export const PnLTab: React.FC<PnLTabProps> = ({
                   </b>
                 </div>
 
-                {/* ชั้นที่ 2: ยุบ/ขยายทั้ง 3 หมวดย่อยพร้อมกัน */}
-                {!collapsedSubTables.has('netApSection') && (
-                  <button
-                    type="button"
-                    onClick={toggleAllNetApSubTables}
-                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50/70 px-2.5 text-[11px] font-bold text-indigo-900 hover:bg-indigo-100 transition-colors cursor-pointer"
-                    title="ยุบหรือขยายตารางย่อยทั้ง 3 หมวดพร้อมกัน"
-                  >
-                    {areAllNetApSubCollapsed ? (
-                      <>
-                        <ChevronRight className="h-3.5 w-3.5" />
-                        <span>ขยายทั้ง 3 หมวด</span>
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="h-3.5 w-3.5" />
-                        <span>ยุบทั้ง 3 หมวด</span>
-                      </>
-                    )}
-                  </button>
-                )}
 
                 {/* ชั้นที่ 1: ยุบ/ขยายกล่องหมวด 5 ทั้งหมด */}
                 <button
