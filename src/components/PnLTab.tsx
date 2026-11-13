@@ -442,9 +442,6 @@ export const PnLTab: React.FC<PnLTabProps> = ({
                 <h4 className="text-sm font-extrabold text-slate-900">
                   5. Net A&P (MKT Cost)
                 </h4>
-                <p className="text-xs text-slate-500">
-                  รวมค่าใช้จ่ายการตลาดจาก ATL, BTL และ Other Marketing Expenses
-                </p>
               </div>
 
               <div className="flex items-center gap-2.5 flex-wrap">
@@ -511,7 +508,7 @@ export const PnLTab: React.FC<PnLTabProps> = ({
                 6. Fixed Cost & Administrative Expenses
               </h4>
               <div className="flex items-center gap-3">
-                <b className="text-base font-black text-slate-900 tabular-nums">
+                <b className="text-base font-black text-indigo-900 tabular-nums">
                   {costPrivacy ? '••••••' : `${baht(fixedCostTotal)} ฿`}
                 </b>
                 <button
@@ -552,7 +549,7 @@ export const PnLTab: React.FC<PnLTabProps> = ({
                 7. Other Expense
               </h4>
               <div className="flex items-center gap-3">
-                <b className="text-base font-black text-slate-900 tabular-nums">
+                <b className="text-base font-black text-indigo-900 tabular-nums">
                   {costPrivacy ? '••••••' : `${baht(otherExpenseTotal)} ฿`}
                 </b>
                 <button
